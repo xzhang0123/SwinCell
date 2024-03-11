@@ -1,0 +1,23 @@
+Metadata-Version: 2.1
+Name: swincell
+Version: 0.1
+Summary: A transformer based cell segmentation framework
+Home-page: https://github.com/xzhang0123/swincell
+Author: ***
+Author-email: ****@gmail.com
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Description-Content-Type: ***
+License-File: LICENSE
+
+## SwinCell: a transformer-based framework for dense 3D cellular segmentation 
+
+
+

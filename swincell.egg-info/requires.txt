@@ -1,0 +1,10 @@
+scikit-image>=0.19.3
+tqdm>=4.64.0
+monai>=0.10
+torch>=1.8.1
+torchvision>=0.9.1
+libtiff>=0.4.2
+numpy>=1.24.4
+seaborn>=0.12.1
+scipy>=1.5.4
+matplotlib>=3.5.2

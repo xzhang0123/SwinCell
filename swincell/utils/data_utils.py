@@ -1,0 +1,836 @@
+# Copyright 2020 - 2022 MONAI Consortium
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import json
+import math
+import os
+
+import libtiff
+libtiff.libtiff_ctypes.suppress_warnings()
+import numpy as np
+import pandas as pd
+import torch
+from natsort import natsorted
+
+from monai import data, transforms
+
+from monai.transforms import  Transform, MapTransform
+import torch
+import numpy as np
+# from cellpose_utils import masks_to_edges
+# from monai.utils.enums import TransformBackends
+class Cellpose_reshape(Transform):
+
+    # backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __call__(self, img):
+        # if img has channel dim, squeeze it
+        if img.ndim == 4 and img.shape[0] == 1:
+            img = img.squeeze(0)
+
+        result =np.array(np.split(img,4,axis=2))
+        result[0] = np.uint8(result[0]>0)
+        result[1:] = (result[1:] - 127)/127
+        # result.shape,(4, 96, 512, 512)
+
+        
+        return result
+
+class Cellpose_reshaped(MapTransform):
+
+
+    # backend = Cellpose_reshape.backend
+
+    def __init__(self, keys, allow_missing_keys: bool = False):
+        super().__init__(keys, allow_missing_keys)
+        self.converter = Cellpose_reshape()
+
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = self.converter(d[key])
+        return d
+        
+
+class Sampler(torch.utils.data.Sampler):
+    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, make_even=True):
+        if num_replicas is None:
+            if not torch.distributed.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            num_replicas = torch.distributed.get_world_size()
+        if rank is None:
+            if not torch.distributed.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            rank = torch.distributed.get_rank()
+        self.shuffle = shuffle
+        self.make_even = make_even
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.epoch = 0
+        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+        self.total_size = self.num_samples * self.num_replicas
+        indices = list(range(len(self.dataset)))
+        self.valid_length = len(indices[self.rank : self.total_size : self.num_replicas])
+
+    def __iter__(self):
+        if self.shuffle:
+            g = torch.Generator()
+            g.manual_seed(self.epoch)
+            indices = torch.randperm(len(self.dataset), generator=g).tolist()
+        else:
+            indices = list(range(len(self.dataset)))
+        if self.make_even:
+            if len(indices) < self.total_size:
+                if self.total_size - len(indices) < len(indices):
+                    indices += indices[: (self.total_size - len(indices))]
+                else:
+                    extra_ids = np.random.randint(low=0, high=len(indices), size=self.total_size - len(indices))
+                    indices += [indices[ids] for ids in extra_ids]
+            assert len(indices) == self.total_size
+        indices = indices[self.rank : self.total_size : self.num_replicas]
+        self.num_samples = len(indices)
+        return iter(indices)
+
+    def __len__(self):
+        return self.num_samples
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+
+def datafold_read(datalist, basedir, fold=0, key="training"):
+
+    with open(datalist) as f:
+        json_data = json.load(f)
+
+    json_data = json_data[key]
+
+    for d in json_data:
+        for k, v in d.items():
+            if isinstance(d[k], list):
+                d[k] = [os.path.join(basedir, iv) for iv in d[k]]
+            elif isinstance(d[k], str):
+                d[k] = os.path.join(basedir, d[k]) if len(d[k]) > 0 else d[k]
+
+    tr = []
+    val = []
+    for d in json_data:
+        if "fold" in d and d["fold"] == fold:
+            val.append(d)
+        else:
+            tr.append(d)
+
+    return tr, val
+# def json_file_loader(args):#need to work on this, not used for now
+#     #modified from here
+#     data_dir  = args.data_dir
+#     json_list = json.load(args.json_list)
+#     print('json file loader tiff')
+#     import os
+#     import glob
+#     if args.fold is None:
+#         N = len(os.listdir(os.path.join(args.data_dir,'image')))
+#         # print(N)
+#         split = int(0.8*N) # default 80% for training
+#         train_img_full_paths = glob.glob(os.path.join(args.data_dir,'image/*'))[:split]
+#         train_label_full_paths = glob.glob(os.path.join(args.data_dir,'label/*'))[:split]
+#         valid_img_full_paths = glob.glob(os.path.join(args.data_dir,'image/*'))[split:]
+#         valid_label_full_paths =glob.glob(os.path.join(args.data_dir,'label/*'))[split:]
+
+#         train_datalist = [{'image':image,'label':label} for image,label in zip(train_img_full_paths,train_label_full_paths)]    
+#         val_datalist = [{'image':image,'label':label} for image,label in zip(valid_img_full_paths,valid_label_full_paths)]  
+#     fold = args.fold
+
+#     print(len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),'a')
+
+
+
+#     train_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.AsDiscreted(keys=["label"],threshold=1),
+#             transforms.AddChanneld(keys=["image", "label"]),
+# 	        transforms.Resized(keys=["image", "label"],spatial_size=(512//args.dsp,512//args.dsp,96//args.dsp)),
+#             transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
+#             # transforms.Spacingd(
+#             #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+#             # ),
+#             transforms.ScaleIntensityRanged(
+#                 keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+#             ),
+#             transforms.RandSpatialCropSamplesd(
+#                 keys=["image","label"],
+#                 roi_size=[args.roi_x, args.roi_y, args.roi_z],
+#                 num_samples=2,
+#                 random_center=True,
+#                 random_size=False,
+#             ),
+#             transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=0),
+#             transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=1),
+#             transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=2),
+#             transforms.RandRotate90d(keys=["image", "label"], prob=args.RandRotate90d_prob, max_k=3),
+#             transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+#             transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+#     val_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.AsDiscreted(keys=["label"],threshold=1),
+#             transforms.AddChanneld(keys=["image", "label"]),
+# 	        transforms.Resized(keys=["image", "label"],spatial_size=(512//args.dsp,512//args.dsp,96//args.dsp)),
+#             # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
+#             # transforms.Spacingd(
+#             #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+#             # ),
+#             # transforms.ScaleIntensityRanged(
+#             #     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+#             # ),
+#             # transforms.RandSpatialCropSamplesd(
+#             #         keys=["image","label"],
+#             #         roi_size=[args.roi_x, args.roi_y, args.roi_z],
+#             #         num_samples=2,
+#             #         random_center=True,
+#             #         random_size=False,
+#             #     ),
+#             # transforms.CropForegroundd(keys=["image", "label"], source_key="image"),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+
+#     test_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.AsDiscreted(keys=["label"],threshold=1),
+#             transforms.AddChanneld(keys=["image", "label"]),
+#             # transforms.Orientationd(keys=["image"], axcodes="RAS"),
+#             # transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
+#             # transforms.ScaleIntensityRanged(
+#             #     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+#             # ),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+
+#     if args.test_mode:
+#         print('test mode NA')
+#         # test_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+#         # test_ds = data.Dataset(data=test_files, transform=test_transform)
+#         # test_sampler = Sampler(test_ds, shuffle=False) if args.distributed else None
+#         # test_loader = data.DataLoader(
+#         #     test_ds,
+#         #     batch_size=1,
+#         #     shuffle=False,
+#         #     num_workers=args.workers,
+#         #     sampler=test_sampler,
+#         #     pin_memory=True,
+#         #     persistent_workers=True,
+#         # )
+#         # loader = test_loader
+#     else:
+
+#         # datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
+#         #if args.use_normal_dataset:
+#         if 0:
+#             train_ds = data.Dataset(data=train_datalist, transform=train_transform)
+#         else:
+#             train_ds = data.CacheDataset(
+#                 data=train_datalist, transform=train_transform, cache_num=24, cache_rate=1.0, num_workers=args.workers
+#             )
+#         train_sampler = Sampler(train_ds) if args.distributed else None
+#         train_loader = data.DataLoader(
+#             train_ds,
+#             batch_size=args.batch_size,
+#             shuffle=(train_sampler is None),
+#             num_workers=args.workers,
+#             sampler=train_sampler,
+#             pin_memory=True,
+#         )
+#         # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+#         val_ds = data.Dataset(data=val_datalist, transform=val_transform)
+#         val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+#         val_loader = data.DataLoader(
+#             val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+#         )
+#         loader = [train_loader, val_loader]
+
+#     return loader
+
+
+# def folder_loader(args):
+# #modified from here
+#     print('folder loader tiff')
+#     import os
+#     import glob
+#     if args.fold is None:
+#         N = len(os.listdir(os.path.join(args.data_dir,'image')))
+#         # print(N)
+#         # ordered split--------------------------------------------------------------------
+#         # split = int(0.8*N) # default 80% for training
+#         # train_img_full_paths = glob.glob(os.path.join(args.data_dir,'image/*'))[:split]
+#         # train_label_full_paths = glob.glob(os.path.join(args.data_dir,'label/*'))[:split]
+#         # valid_img_full_paths = glob.glob(os.path.join(args.data_dir,'image/*'))[split:]
+#         # valid_label_full_paths =glob.glob(os.path.join(args.data_dir,'label/*'))[split:]
+#         # evenly distributed split------------------------------------------------
+#         img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'image/*.tiff')))
+#         label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'label/*.tiff')))
+#         valid_img_full_paths = img_full_paths[::5]
+#         valid_label_full_paths = label_full_paths[::5]
+#         train_img_full_paths = [f for f in img_full_paths if f not in valid_img_full_paths]
+#         train_label_full_paths = [f for f in label_full_paths if f not in valid_label_full_paths]
+
+#         train_datalist = [{'image':image,'label':label} for image,label in zip(train_img_full_paths,train_label_full_paths)]    
+#         val_datalist = [{'image':image,'label':label} for image,label in zip(valid_img_full_paths,valid_label_full_paths)]  
+#     fold = args.fold
+
+#     print(len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),'a')
+
+
+
+#     train_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+
+#             # transforms.AddChanneld(keys=["image", "label"]),
+#             #----------------------------for multichannel-----------------------
+#             # transforms.AddChanneld(keys=["image"]),
+#             # transforms.ConvertToMultiChannelNanolived(keys="label"),
+#             #----------------------------for single channel-----------------------
+#             transforms.AddChanneld(keys=["image","label"]),
+#             transforms.AsDiscreted(keys=["label"],threshold=1),
+#             #----------------------------------------------------------------
+# 	        transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96)),
+#             transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
+#             # transforms.Spacingd(
+#             #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+#             # ),
+#             transforms.ScaleIntensityRanged(
+#                 keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+#             ),
+#             transforms.RandSpatialCropSamplesd(
+#                 keys=["image","label"],
+#                 roi_size=[args.roi_x, args.roi_y, args.roi_z],
+#                 num_samples=2,
+#                 random_center=True,
+#                 random_size=False,
+#             ),
+#             transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=0),
+#             transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=1),
+#             transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=2),
+#             transforms.RandRotate90d(keys=["image", "label"], prob=args.RandRotate90d_prob, max_k=3),
+#             transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+#             transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+#     val_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+#             # transforms.AsDiscreted(keys=["label"],threshold=1),
+#             #----------------------------for multichannel-----------------------
+#             # transforms.AddChanneld(keys=["image"]),
+#             # transforms.ConvertToMultiChannelNanolived(keys="label"),
+#             #----------------------------for single channel-----------------------
+#             transforms.AddChanneld(keys=["image","label"]),
+#             transforms.AsDiscreted(keys=["label"],threshold=1),
+#             #----------------------------------------------------------------
+
+#             # transforms.AsDiscreted(keys=["label"],to_onehot=2),
+# 	        transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96)),
+#             # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
+#             # transforms.Spacingd(
+#             #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+#             # ),
+#             transforms.ScaleIntensityRanged(
+#                 keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+#             ),
+#             # transforms.RandSpatialCropSamplesd(
+#             #         keys=["image","label"],
+#             #         roi_size=[args.roi_x, args.roi_y, args.roi_z],
+#             #         num_samples=2,
+#             #         random_center=True,
+#             #         random_size=False,
+#             #     ),
+#             # transforms.CropForegroundd(keys=["image", "label"], source_key="image"),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+
+#     test_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.AsDiscreted(keys=["label"],threshold=1),
+#             transforms.AddChanneld(keys=["image", "label"]),
+#             # transforms.Orientationd(keys=["image"], axcodes="RAS"),
+#             # transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
+#             # transforms.ScaleIntensityRanged(
+#             #     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+#             # ),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+
+#     if args.test_mode:
+#         print('test mode NA')
+#         # test_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+#         # test_ds = data.Dataset(data=test_files, transform=test_transform)
+#         # test_sampler = Sampler(test_ds, shuffle=False) if args.distributed else None
+#         # test_loader = data.DataLoader(
+#         #     test_ds,
+#         #     batch_size=1,
+#         #     shuffle=False,
+#         #     num_workers=args.workers,
+#         #     sampler=test_sampler,
+#         #     pin_memory=True,
+#         #     persistent_workers=True,
+#         # )
+#         # loader = test_loader
+#     else:
+
+#         # datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
+#         #if args.use_normal_dataset:
+#         if 0:
+#             train_ds = data.Dataset(data=train_datalist, transform=train_transform)
+#         else:
+#             train_ds = data.CacheDataset(
+#                 data=train_datalist, transform=train_transform, cache_num=24, cache_rate=1.0, num_workers=args.workers
+#             )
+#         train_sampler = Sampler(train_ds) if args.distributed else None
+#         train_loader = data.DataLoader(
+#             train_ds,
+#             batch_size=args.batch_size,
+#             shuffle=(train_sampler is None),
+#             num_workers=args.workers,
+#             sampler=train_sampler,
+#             pin_memory=True,
+#         )
+#         # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+#         val_ds = data.Dataset(data=val_datalist, transform=val_transform)
+#         val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+#         val_loader = data.DataLoader(
+#             val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+#         )
+#         loader = [train_loader, val_loader]
+
+#     return loader
+
+
+def folder_loader_cellpose(args):
+#modified from here
+    print('folder loader cellpose tiff')
+    import os
+    import glob
+    if args.fold is None:
+        N = len(os.listdir(os.path.join(args.data_dir,'images')))
+        img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tif*')))
+        label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tif*')))
+
+        if len(img_full_paths)<5:
+            img_full_paths = img_full_paths * 10
+            label_full_paths = label_full_paths * 10
+        # split dataset, 80% for training, 20% for validation   
+        valid_img_full_paths = img_full_paths[::5]
+        valid_label_full_paths = label_full_paths[::5]
+
+        train_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 != 0]
+        train_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 != 0]
+        # end of split dataset
+
+    else:
+        N =len(os.listdir(os.path.join(args.data_dir,'images')))
+        print('length of datasets',N)
+        # whole dataset
+        img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tiff')))
+        label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tiff')))
+        #------split -------
+        valid_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 == args.fold-1]
+        valid_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 == args.fold-1]
+
+        test_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 == args.fold]
+        test_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 == args.fold]
+
+        train_img_full_paths = [f for f in img_full_paths if f not in valid_img_full_paths and f not in test_img_full_paths]
+        train_label_full_paths = [f for f in label_full_paths if f not in valid_label_full_paths and f not in test_label_full_paths]
+        print('length of train/valid/test datasets',len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),len(test_img_full_paths),len(test_label_full_paths))
+
+    train_datalist = [{'image':image,'label':label} for image,label in zip(train_img_full_paths, train_label_full_paths)]    
+    val_datalist = [{'image':image,'label':label} for image,label in zip(valid_img_full_paths, valid_label_full_paths)]  
+    # print(len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),'a')
+
+    if args.dataset =='colon':
+        # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(1200,960,128))
+        img_spatial_size= (1200,960,128)
+    elif args.dataset =='allen':
+        # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(900,600,64)),
+        img_spatial_size= (900,600,64)
+        # transform_resize = None
+    elif args.dataset =='nanolive':
+        # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96))
+        img_spatial_size = (512,512,96)
+        # transform_resize = None
+    else:
+        raise Warning("dataset not defined")
+        transform_resize = None
+
+    train_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
+            Cellpose_reshaped(keys=["label"]),
+            # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+            # transforms.AsDiscreted(keys=["label"],threshold=1),
+
+            # transforms.AddChanneld(keys=["image", "label"]),
+            #----------------------------for multichannel-----------------------
+            # transforms.AddChanneld(keys=["image"]),
+            # transforms.ConvertToMultiChannelNanolived(keys="label"),
+            #----------------------------for single channel-----------------------
+            # transforms.AddChanneld(keys=["image","label"]),
+            # transforms.AsDiscreted(keys=["label"],threshold=1),
+            #----------------------------------------------------------------
+            # transforms.AddChanneld(keys=["image"]),
+            # transform_resize,
+	        transforms.Resized(keys=["image", "label"],spatial_size=img_spatial_size),
+            # transforms.Resized(keys=["image", "label"],spatial_size=(900,600,64)),  #for allen cell only
+            # transforms.Resized(keys=["image", "label"],spatial_size=(1200,960,128)),  #for colon dataset
+            # transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96)),  #for nanolive
+            
+            # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
+            # transforms.Spacingd(
+            #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+            # ),
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            ),
+            transforms.RandSpatialCropSamplesd(
+                keys=["image","label"],
+                roi_size=[args.roi_x, args.roi_y, args.roi_z],
+                num_samples=2,
+                random_center=True,
+                random_size=False,
+            ),
+            # transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=0),
+            # transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=1),
+            # transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=2),
+            # transforms.RandRotate90d(keys=["image", "label"], prob=args.RandRotate90d_prob, max_k=3),
+            # transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+            # transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+            # transforms.RepeatChanneld(keys='label',repeats= 4),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+    val_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
+            Cellpose_reshaped(keys=["label"]),
+            # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+            # transforms.AsDiscreted(keys=["label"],threshold=1),
+            #----------------------------for multichannel-----------------------
+            # transforms.AddChanneld(keys=["image"]),
+            # transforms.ConvertToMultiChannelNanolived(keys="label"),
+            #----------------------------for single channel-----------------------
+            # transforms.AddChanneld(keys=["image","label"]),
+            # transforms.AsDiscreted(keys=["label"],threshold=1),
+            #----------------------------------------------------------------
+
+            # transforms.AsDiscreted(keys=["label"],to_onehot=2),
+	        # transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96)),
+            # transforms.Resized(keys=["image", "label"],spatial_size=(900,600,64)),  #for allen cell only
+            # transforms.Resized(keys=["image", "label"],spatial_size=(1200,960,128)),  #for colon dataset
+            transforms.Resized(keys=["image", "label"],spatial_size=img_spatial_size),  #for nanolive
+            # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
+            # transforms.Spacingd(
+            #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+            # ),
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            ),
+            # need to add this to ensure the images have the same sizes, when all the images are the same size, this can be removed
+            transforms.RandSpatialCropSamplesd(
+                keys=["image","label"],
+                roi_size=[args.roi_x, args.roi_y, args.roi_z],
+                num_samples=2,
+                random_center=True,
+                random_size=False,
+            ),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+
+    test_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.AsDiscreted(keys=["label"],threshold=1),
+            transforms.AddChanneld(keys=["image", "label"]),
+            # transforms.Orientationd(keys=["image"], axcodes="RAS"),
+            # transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
+            # transforms.ScaleIntensityRanged(
+            #     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            # ),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+
+    if args.test_mode:
+        print('test mode NA')
+
+    else:
+
+        # datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
+        #if args.use_normal_dataset:
+        if 0:
+            train_ds = data.Dataset(data=train_datalist, transform=train_transform)
+        else:
+            train_ds = data.CacheDataset(
+                data=train_datalist, transform=train_transform, cache_num=24, cache_rate=1.0, num_workers=args.workers
+            )
+        train_sampler = Sampler(train_ds) if args.distributed else None
+        train_loader = data.DataLoader(
+            train_ds,
+            batch_size=args.batch_size,
+            shuffle=(train_sampler is None),
+            num_workers=args.workers,
+            sampler=train_sampler,
+            pin_memory=True,
+        )
+        # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+        val_ds = data.Dataset(data=val_datalist, transform=val_transform)
+        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+        val_loader = data.DataLoader(
+            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+        )
+        loader = [train_loader, val_loader]
+
+    return loader
+
+
+def get_loader_Allen_tiff(args):
+#modified from here
+    
+    root_dir = '/data/download_data/quilt-data-access-tutorials-main/all_fov/'
+    df = pd.read_csv(root_dir+'meta_info.csv')
+
+    fold = args.fold
+    N =50
+    print('getloader allen tiff')
+    Nd = int(N/5) #5 fold training
+    input_dir=df['fov_path'].unique()[:N].tolist()
+    target_dir=df['fov_seg_path'].unique()[:N].tolist()
+    print(fold,Nd)
+    valid_img_paths =input_dir[fold*Nd:(fold+1)*Nd]
+    valid_label_paths = target_dir[fold*Nd:(fold+1)*Nd]
+    train_img_paths =[path for path in input_dir if path not in valid_img_paths]
+    train_label_paths =[path for path in target_dir if path not in valid_label_paths]
+
+    
+
+    train_img_full_paths =[os.path.join(root_dir,'fov_path_channel/'+file.split('/')[-1]) for file in train_img_paths]
+    train_label_full_paths =[os.path.join(root_dir,'fov_seg_path_channel/'+file.split('/')[-1]) for file in train_label_paths]
+    valid_img_full_paths =[os.path.join(root_dir,'fov_path_channel/'+file.split('/')[-1]) for file in valid_img_paths]
+    valid_label_full_paths =[os.path.join(root_dir,'fov_seg_path_channel/'+file.split('/')[-1]) for file in valid_label_paths]
+    #
+    print(len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),'a')
+
+    # datalist0 =sorted(glob.glob(os.path.join(image_dir+'/*.tiff')))
+    # datalist0 =[{'image':i} for i in datalist0[:30]] +
+    # datadic ={'image':i for i in datalist}
+
+    train_datalist = [{'image':a,'label':b} for a,b in zip(train_img_full_paths,train_label_full_paths)]    
+
+    val_datalist = [{'image':a,'label':b} for a,b in zip(valid_img_full_paths,valid_label_full_paths)]  
+
+    train_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.AsDiscreted(keys=["label"],threshold=1),
+            transforms.AddChanneld(keys=["image", "label"]),
+	        transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96)),
+            transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
+            # transforms.Spacingd(
+            #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+            # ),
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            ),
+            transforms.RandSpatialCropSamplesd(
+                keys=["image","label"],
+                roi_size=[args.roi_x, args.roi_y, args.roi_z],
+                num_samples=2,
+                random_center=True,
+                random_size=False,
+            ),
+            transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=0),
+            transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=1),
+            transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=2),
+            transforms.RandRotate90d(keys=["image", "label"], prob=args.RandRotate90d_prob, max_k=3),
+            transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+            transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+    val_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.AsDiscreted(keys=["label"],threshold=1),
+            transforms.AddChanneld(keys=["image", "label"]),
+	        transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96)),
+            # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
+            # transforms.Spacingd(
+            #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+            # ),
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            ),
+            # transforms.RandSpatialCropSamplesd(
+            #         keys=["image","label"],
+            #         roi_size=[args.roi_x, args.roi_y, args.roi_z],
+            #         num_samples=2,
+            #         random_center=True,
+            #         random_size=False,
+            #     ),
+            # transforms.CropForegroundd(keys=["image", "label"], source_key="image"),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+
+    test_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.AsDiscreted(keys=["label"],threshold=1),
+            transforms.AddChanneld(keys=["image", "label"]),
+            # transforms.Orientationd(keys=["image"], axcodes="RAS"),
+            # transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
+            # transforms.ScaleIntensityRanged(
+            #     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            # ),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+
+    if args.test_mode:
+        print('test mode NA')
+        # test_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+        # test_ds = data.Dataset(data=test_files, transform=test_transform)
+        # test_sampler = Sampler(test_ds, shuffle=False) if args.distributed else None
+        # test_loader = data.DataLoader(
+        #     test_ds,
+        #     batch_size=1,
+        #     shuffle=False,
+        #     num_workers=args.workers,
+        #     sampler=test_sampler,
+        #     pin_memory=True,
+        #     persistent_workers=True,
+        # )
+        # loader = test_loader
+    else:
+
+        # datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
+        #if args.use_normal_dataset:
+        if 0:
+            train_ds = data.Dataset(data=train_datalist, transform=train_transform)
+        else:
+            train_ds = data.CacheDataset(
+                data=train_datalist, transform=train_transform, cache_num=24, cache_rate=1, num_workers=args.workers
+            )
+        train_sampler = Sampler(train_ds) if args.distributed else None
+        train_loader = data.DataLoader(
+            train_ds,
+            batch_size=args.batch_size,
+            shuffle=(train_sampler is None),
+            num_workers=args.workers,
+            sampler=train_sampler,
+            pin_memory=True,
+        )
+        # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+        val_ds = data.Dataset(data=val_datalist, transform=val_transform)
+        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+        val_loader = data.DataLoader(
+            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+        )
+        loader = [train_loader, val_loader]
+
+    return loader
+
+
+def get_loader(args):
+    data_dir = args.data_dir
+    datalist_json = args.json_list
+    train_files, validation_files = datafold_read(datalist=datalist_json, basedir=data_dir, fold=args.fold)
+    train_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+            transforms.CropForegroundd(
+                keys=["image", "label"], source_key="image", k_divisible=[args.roi_x, args.roi_y, args.roi_z]
+            ),
+            transforms.RandSpatialCropd(
+                keys=["image", "label"], roi_size=[args.roi_x, args.roi_y, args.roi_z], random_size=False
+            ),
+            transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
+            transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
+            transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
+            transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+            transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
+            transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=1.0),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+    val_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+            transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+
+    test_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+            transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+
+    if args.test_mode:
+
+        val_ds = data.Dataset(data=validation_files, transform=test_transform)
+        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+        test_loader = data.DataLoader(
+            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+        )
+
+        loader = test_loader
+    else:
+        train_ds = data.Dataset(data=train_files, transform=train_transform)
+
+        train_sampler = Sampler(train_ds) if args.distributed else None
+        train_loader = data.DataLoader(
+            train_ds,
+            batch_size=args.batch_size,
+            shuffle=(train_sampler is None),
+            num_workers=args.workers,
+            sampler=train_sampler,
+            pin_memory=True,
+        )
+        val_ds = data.Dataset(data=validation_files, transform=val_transform)
+        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+        val_loader = data.DataLoader(
+            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+        )
+        loader = [train_loader, val_loader]
+
+    return loader
