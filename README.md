@@ -2,11 +2,11 @@
 
 
 ## Requiments
-
+see requiments.txt
 ## Geting Started
 ### Create the environment:
 ```bash
-conda create --name my-env-name numpy
+conda create --name swincell numpy
 ```
 ### Install with pip
 ```bash
