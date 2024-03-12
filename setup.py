@@ -18,20 +18,42 @@ setup(
     author_email='****@gmail.com',
     url='https://github.com/xzhang0123/swincell',
     install_requires=[
+        'numpy>=1.21.5',
         'scikit-image>=0.19.3',
         'tqdm>=4.64.0',
-        'monai>=0.10',
+        'monai[all]>=0.10',
         'torch>=1.8.1',
-        'torchvision>=0.9.1',
+        
         'libtiff>=0.4.2',
-        'numpy>=1.22.3',
+        
         'seaborn>=0.12.1',
+        
         #
-        
-        
-        'scipy>=1.5.4',
+        'scipy>=1.7.1',
         #'scikit-learn>=1.1.3',
-        'matplotlib>=3.5.2',
+        'matplotlib>=3.8.3',
+        'pandas==1.3.4',
+        'opencv_python_headless==3.4.18.65',
+        'tifffile==2022.8.12',
+        'imagecodecs==2024.1.1',
+        'tracker==0.1.1',
+        'natsort==8.3.1',
+        'tensorboardX==2.6.2.2', # version TBD
+        'numba==0.59.0',  # version TBD
+        'csbdeep==0.7.4',
+        'nibabel>=4.0.1',
+        #from config
+        'pytorch-ignite==0.4.8',
+        'torchvision>=0.12.0',
+        'transformers>=4.18.0',
+        'mlflow>=1.26.1',
+        'gdown>=4.4.0',
+
+
+        # additional packages
+        'pyyaml',
+
+
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',

@@ -1,3 +1,4 @@
+# flow generation algorithm from Cellpose, C. Stringer et al. 2021
 import time, os
 from scipy.ndimage import maximum_filter1d, find_objects
 import torch

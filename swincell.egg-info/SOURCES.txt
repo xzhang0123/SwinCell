@@ -1,14 +1,11 @@
 LICENSE
 README.md
 setup.py
-optimizers/__init__.py
-optimizers/lr_scheduler.py
 swincell/__init__.py
 swincell/cellpose_dynamics.py
 swincell/cellpose_utils.py
 swincell/cv2_show_res.py
 swincell/cv2_utils.py
-swincell/stardist_matching.py
 swincell/train_main.py
 swincell/trainer.py
 swincell.egg-info/PKG-INFO
@@ -17,6 +14,8 @@ swincell.egg-info/dependency_links.txt
 swincell.egg-info/requires.txt
 swincell.egg-info/top_level.txt
 swincell/notebooks/__init__.py
+swincell/optimizers/__init__.py
+swincell/optimizers/lr_scheduler.py
 swincell/utils/__init__.py
 swincell/utils/data_utils.py
 swincell/utils/plot_utils.py

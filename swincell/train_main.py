@@ -20,10 +20,10 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn.parallel
 import torch.utils.data.distributed
-from optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
-from trainer import run_training
+from swincell.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
+from swincell.trainer import run_training
 # from utils.data_utils import get_loader_Allen_tiff, folder_loader,folder_loader_cellpose
-from utils.data_utils import folder_loader_cellpose
+from swincell.utils.data_utils import folder_loader
 # from uni_data_utils import get_loader_Allen_tiff
 
 from monai.inferers import sliding_window_inference
@@ -132,8 +132,7 @@ def main_worker(gpu, args):
     torch.backends.cudnn.benchmark = True
     args.test_mode = False
     # loader = get_loader_Allen_tiff(args)
-    # loader = folder_loader(args)
-    loader = folder_loader_cellpose(args)
+    loader = folder_loader(args)
     print(args.rank, " gpu", args.gpu)
     if args.rank == 0:
         print("Batch size is:", args.batch_size, "epochs", args.max_epochs)
@@ -152,15 +151,7 @@ def main_worker(gpu, args):
             # feature_size=args.feature_size,
             # use_checkpoint=args.use_checkpoint,
         )
-    elif args.model =='unetr':
-        model = UNETR(
-            img_size=(args.roi_x, args.roi_y, args.roi_z),
-            in_channels=args.in_channels,
-            out_channels=args.out_channels,
-            feature_size=args.feature_size,
-            use_checkpoint=args.use_checkpoint,
-        )
-    elif args.model =='swinunetr':
+    elif args.model =='swin':
         model = SwinUNETR(
             img_size=(args.roi_x, args.roi_y, args.roi_z),
             in_channels=args.in_channels,
