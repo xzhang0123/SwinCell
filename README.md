@@ -6,8 +6,17 @@ see requiments.txt
 ## Geting Started
 ### Create the environment:
 ```bash
-conda create --name swincell numpy
+conda create --name swincell numpy==1.21.5
+conda activate swincell
 ```
+```bash
+cd <swincell_folder>
+pip install .
+```
+for developers, install with
+pip install -e .
+
+
 ### Install with pip
 ```bash
 pip install swincell
