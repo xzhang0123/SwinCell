@@ -14,7 +14,9 @@ cd <swincell_folder>
 pip install .
 ```
 for developers, install with
+```bash
 pip install -e .
+```
 
 
 ### Install with pip
