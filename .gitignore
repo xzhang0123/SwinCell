@@ -9,5 +9,5 @@ runs
 *.csv
 *.mod*
 Nanolive_2d*
-*.egg-info
+*.egg-info/
 junk

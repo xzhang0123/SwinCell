@@ -107,29 +107,6 @@ class Sampler(torch.utils.data.Sampler):
         self.epoch = epoch
 
 
-def datafold_read(datalist, basedir, fold=0, key="training"):
-
-    with open(datalist) as f:
-        json_data = json.load(f)
-
-    json_data = json_data[key]
-
-    for d in json_data:
-        for k, v in d.items():
-            if isinstance(d[k], list):
-                d[k] = [os.path.join(basedir, iv) for iv in d[k]]
-            elif isinstance(d[k], str):
-                d[k] = os.path.join(basedir, d[k]) if len(d[k]) > 0 else d[k]
-
-    tr = []
-    val = []
-    for d in json_data:
-        if "fold" in d and d["fold"] == fold:
-            val.append(d)
-        else:
-            tr.append(d)
-
-    return tr, val
 
 
 def folder_loader(args):
@@ -157,8 +134,8 @@ def folder_loader(args):
         N =len(os.listdir(os.path.join(args.data_dir,'images')))
         print('length of datasets',N)
         # whole dataset
-        img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tiff')))
-        label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tiff')))
+        img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tif*')))
+        label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tif*')))
         #------split -------
         valid_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 == args.fold-1]
         valid_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 == args.fold-1]
@@ -176,7 +153,8 @@ def folder_loader(args):
 
     if args.dataset =='colon':
         # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(1200,960,128))
-        img_spatial_size= (1200,960,128)
+        img_spatial_size= (1200//args.dsp,960//args.dsp,128//args.dsp)
+        # print(img_spatial_size)
     elif args.dataset =='allen':
         # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(900,600,64)),
         img_spatial_size= (900,600,64)
@@ -192,7 +170,7 @@ def folder_loader(args):
     train_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            transforms.EnsureChannelFirstd(keys=["image", "label"]),
+            # transforms.EnsureChannelFirstd(keys=["image", "label"]),
             flow_reshaped(keys=["label"]),
             # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
             # transforms.AsDiscreted(keys=["label"],threshold=1),
@@ -239,7 +217,7 @@ def folder_loader(args):
     val_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            transforms.EnsureChannelFirstd(keys=["image", "label"]),
+            # transforms.EnsureChannelFirstd(keys=["image", "label"]),
             flow_reshaped(keys=["label"]),
             # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
             # transforms.AsDiscreted(keys=["label"],threshold=1),
@@ -470,73 +448,98 @@ def get_loader_Allen_tiff(args):
     return loader
 
 
-def get_loader(args):
-    data_dir = args.data_dir
-    datalist_json = args.json_list
-    train_files, validation_files = datafold_read(datalist=datalist_json, basedir=data_dir, fold=args.fold)
-    train_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image", "label"]),
-            transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
-            transforms.CropForegroundd(
-                keys=["image", "label"], source_key="image", k_divisible=[args.roi_x, args.roi_y, args.roi_z]
-            ),
-            transforms.RandSpatialCropd(
-                keys=["image", "label"], roi_size=[args.roi_x, args.roi_y, args.roi_z], random_size=False
-            ),
-            transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
-            transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
-            transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
-            transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-            transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
-            transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=1.0),
-            transforms.ToTensord(keys=["image", "label"]),
-        ]
-    )
-    val_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image", "label"]),
-            transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
-            transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-            transforms.ToTensord(keys=["image", "label"]),
-        ]
-    )
+# def datafold_read(datalist, basedir, fold=0, key="training"):
 
-    test_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image", "label"]),
-            transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
-            transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-            transforms.ToTensord(keys=["image", "label"]),
-        ]
-    )
+#     with open(datalist) as f:
+#         json_data = json.load(f)
 
-    if args.test_mode:
+#     json_data = json_data[key]
 
-        val_ds = data.Dataset(data=validation_files, transform=test_transform)
-        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
-        test_loader = data.DataLoader(
-            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
-        )
+#     for d in json_data:
+#         for k, v in d.items():
+#             if isinstance(d[k], list):
+#                 d[k] = [os.path.join(basedir, iv) for iv in d[k]]
+#             elif isinstance(d[k], str):
+#                 d[k] = os.path.join(basedir, d[k]) if len(d[k]) > 0 else d[k]
 
-        loader = test_loader
-    else:
-        train_ds = data.Dataset(data=train_files, transform=train_transform)
+#     tr = []
+#     val = []
+#     for d in json_data:
+#         if "fold" in d and d["fold"] == fold:
+#             val.append(d)
+#         else:
+#             tr.append(d)
 
-        train_sampler = Sampler(train_ds) if args.distributed else None
-        train_loader = data.DataLoader(
-            train_ds,
-            batch_size=args.batch_size,
-            shuffle=(train_sampler is None),
-            num_workers=args.workers,
-            sampler=train_sampler,
-            pin_memory=True,
-        )
-        val_ds = data.Dataset(data=validation_files, transform=val_transform)
-        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
-        val_loader = data.DataLoader(
-            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
-        )
-        loader = [train_loader, val_loader]
+#     return tr, val
 
-    return loader
+
+# def get_loader(args):
+#     data_dir = args.data_dir
+#     datalist_json = args.json_list
+#     train_files, validation_files = datafold_read(datalist=datalist_json, basedir=data_dir, fold=args.fold)
+#     train_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+#             transforms.CropForegroundd(
+#                 keys=["image", "label"], source_key="image", k_divisible=[args.roi_x, args.roi_y, args.roi_z]
+#             ),
+#             transforms.RandSpatialCropd(
+#                 keys=["image", "label"], roi_size=[args.roi_x, args.roi_y, args.roi_z], random_size=False
+#             ),
+#             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
+#             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
+#             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
+#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+#             transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
+#             transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=1.0),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+#     val_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+
+#     test_transform = transforms.Compose(
+#         [
+#             transforms.LoadImaged(keys=["image", "label"]),
+#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
+#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
+#             transforms.ToTensord(keys=["image", "label"]),
+#         ]
+#     )
+
+#     if args.test_mode:
+
+#         val_ds = data.Dataset(data=validation_files, transform=test_transform)
+#         val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+#         test_loader = data.DataLoader(
+#             val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+#         )
+
+#         loader = test_loader
+#     else:
+#         train_ds = data.Dataset(data=train_files, transform=train_transform)
+
+#         train_sampler = Sampler(train_ds) if args.distributed else None
+#         train_loader = data.DataLoader(
+#             train_ds,
+#             batch_size=args.batch_size,
+#             shuffle=(train_sampler is None),
+#             num_workers=args.workers,
+#             sampler=train_sampler,
+#             pin_memory=True,
+#         )
+#         val_ds = data.Dataset(data=validation_files, transform=val_transform)
+#         val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+#         val_loader = data.DataLoader(
+#             val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+#         )
+#         loader = [train_loader, val_loader]
+
+#     return loader

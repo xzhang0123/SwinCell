@@ -19,15 +19,18 @@ pip install -e .
 ```
 
 
-### Install with pip
+<!-- ### Install with pip
 ```bash
 pip install swincell
-```
+``` -->
 ## Data directory layout
     .
     ├── swincell
     ├── data_root_folder                    
     │   ├── images         # raw images in tiff format
-    │   ├── labels         # 
-    │   └── flows          # flows
+    │   └── labels         # ground truth semantic label. 0=background, 1=cell
     └── ...
+## Model training
+TO DO
+## Model inference
+TO DO 
