@@ -36,9 +36,13 @@ class flow_reshape(Transform):
         if img.ndim == 4 and img.shape[0] == 1:
             img = img.squeeze(0)
 
+        # result =np.array(np.split(img,4,axis=2),dtype=np.uint8)
         result =np.array(np.split(img,4,axis=2))
+        #test
+        # result = 
         result[0] = np.uint8(result[0]>0)
         result[1:] = (result[1:] - 127)/127
+        # print('output flow shape',result.shape, result.dtype)
         # result.shape,(4, 96, 512, 512)
 
         
@@ -153,7 +157,9 @@ def folder_loader(args):
 
     if args.dataset =='colon':
         # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(1200,960,128))
-        img_spatial_size= (1200//args.dsp,960//args.dsp,128//args.dsp)
+        # img_spatial_size= (1200//args.dsp,960//args.dsp,128//args.dsp)
+        # img_spatial_size= (1200,960,128)
+        img_spatial_size= (1300,1030,129)
         # print(img_spatial_size)
     elif args.dataset =='allen':
         # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(900,600,64)),
@@ -170,7 +176,7 @@ def folder_loader(args):
     train_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            # transforms.EnsureChannelFirstd(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
             flow_reshaped(keys=["label"]),
             # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
             # transforms.AsDiscreted(keys=["label"],threshold=1),
@@ -217,7 +223,7 @@ def folder_loader(args):
     val_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            # transforms.EnsureChannelFirstd(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
             flow_reshaped(keys=["label"]),
             # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
             # transforms.AsDiscreted(keys=["label"],threshold=1),
@@ -274,11 +280,11 @@ def folder_loader(args):
 
         # datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
         #if args.use_normal_dataset:
-        if 0:
+        if 1:
             train_ds = data.Dataset(data=train_datalist, transform=train_transform)
         else:
             train_ds = data.CacheDataset(
-                data=train_datalist, transform=train_transform, cache_num=24, cache_rate=1.0, num_workers=args.workers
+                data=train_datalist, transform=train_transform, cache_num=1, cache_rate=0.2, num_workers=args.workers
             )
         train_sampler = Sampler(train_ds) if args.distributed else None
         train_loader = data.DataLoader(

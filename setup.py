@@ -43,7 +43,7 @@ setup(
         'csbdeep==0.7.4',
         'nibabel>=4.0.1',
         #from config
-        'pytorch-ignite==0.4.8',
+        'pytorch-ignite>=0.4.8',
         'torchvision>=0.12.0',
         'transformers>=4.18.0',
         'mlflow>=1.26.1',
