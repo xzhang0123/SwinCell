@@ -9,7 +9,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='swincell',
-    version='0.1',
+    version='0.3',
     packages=find_packages(),
     description='A transformer based cell segmentation framework',
     long_description=open('README.md').read(),

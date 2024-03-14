@@ -12,7 +12,7 @@ import fastremap
 import logging
 dynamics_logger = logging.getLogger(__name__)
 
-import cellpose_utils as utils
+import swincell.utils.utils as utils
 # from cellpose_utils import utils
 #from . import utils, metrics, transforms
 

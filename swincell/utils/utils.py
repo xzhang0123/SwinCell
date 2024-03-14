@@ -154,9 +154,68 @@ from scipy.optimize import linear_sum_assignment
 from skimage.measure import regionprops
 from collections import namedtuple
 from csbdeep.utils import _raise
+from scipy.ndimage import find_objects
+import cv2
 
 matching_criteria = dict()
 
+def distance_to_boundary(masks):
+    """ get distance to boundary of mask pixels
+    
+    Parameters
+    ----------------
+
+    masks: int, 2D or 3D array 
+        size [Ly x Lx] or [Lz x Ly x Lx], 0=NO masks; 1,2,...=mask labels
+
+    Returns
+    ----------------
+
+    dist_to_bound: 2D or 3D array 
+        size [Ly x Lx] or [Lz x Ly x Lx]
+
+    """
+    if masks.ndim > 3 or masks.ndim < 2:
+        raise ValueError('distance_to_boundary takes 2D or 3D array, not %dD array'%masks.ndim)
+    dist_to_bound = np.zeros(masks.shape, np.float64)
+    
+    if masks.ndim==3:
+        for i in range(masks.shape[0]):
+            dist_to_bound[i] = distance_to_boundary(masks[i])
+        return dist_to_bound
+    else:
+        slices = find_objects(masks)
+        for i,si in enumerate(slices):
+            if si is not None:
+                sr,sc = si
+                mask = (masks[sr, sc] == (i+1)).astype(np.uint8)
+                contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+                pvc, pvr = np.concatenate(contours[-2], axis=0).squeeze().T  
+                ypix, xpix = np.nonzero(mask)
+                min_dist = ((ypix[:,np.newaxis] - pvr)**2 + 
+                            (xpix[:,np.newaxis] - pvc)**2).min(axis=1)
+                dist_to_bound[ypix + sr.start, xpix + sc.start] = min_dist
+        return dist_to_bound
+
+def masks_to_edges(masks, threshold=1.0):
+    """ get edges of masks as a 0-1 array 
+    
+    Parameters
+    ----------------
+
+    masks: int, 2D or 3D array 
+        size [Ly x Lx] or [Lz x Ly x Lx], 0=NO masks; 1,2,...=mask labels
+
+    Returns
+    ----------------
+
+    edges: 2D or 3D array 
+        size [Ly x Lx] or [Lz x Ly x Lx], True pixels are edge pixels
+
+    """
+    dist_to_bound = distance_to_boundary(masks)
+    edges = (dist_to_bound < threshold) * (masks > 0)
+    return edges
 
 def label_are_sequential(y):
     """ returns true if y has only sequential labels from 1... """
