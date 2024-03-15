@@ -77,7 +77,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
         img_raw = (img_raw - np.min(img_raw)) / (np.max(img_raw) - np.min(img_raw))
         img_raw  =np.max(img_raw,axis=-1)*255
         img_raw = img_raw.astype(np.uint8)
-#dimenstion is (batch_size, channel, height, width) ????
+        #dimenstion is (batch_size, channel, height, width) 
         img_gt= target[0,0,:,:,:].detach().cpu().numpy()
         # img_gt= (img_gt - np.min(img_gt)) / (np.max(img_gt) - np.min(img_gt))
         img_gt =np.max(img_gt,axis=-1)*255
