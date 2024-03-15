@@ -32,8 +32,9 @@ pip install swincell
     └── ...
 ## Model training
 ### Model training with jupyter-notebook
-[workflow_training](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/workflow.ipynb)
-## Model training via Terminal
+[workflow_training.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/workflow.ipynb)
+A google colab notebook will be added soon.
+### Model training via Terminal
 ```bash
 # activate environment
 conda acivate swincell
