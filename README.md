@@ -31,6 +31,14 @@ pip install swincell
     │   └── labels         # ground truth semantic label. 0=background, 1=cell
     └── ...
 ## Model training
-TO DO
+### Model training with jupyter-notebook
+[Link Text](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/workflow.ipynb)
+## Model training via Terminal
+```bash
+# activate environment
+conda acivate swincell
+
+sh python ./swincell/train_main.py --data_dir=<data_dir> --val_every=<Nvalid> --model 'swin' --dataset 'nanolive'  --a_min=$amin --a_max=$amax --logdir <log_dir> --max_epochs 100 --roi_x=64 --roi_y=64 --roi_z=32  --feature_size=48 \
+```
 ## Model inference
 TO DO 

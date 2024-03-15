@@ -34,7 +34,7 @@ parser.add_argument("--pretrained_model_name", default="model.pt", type=str, hel
 parser.add_argument("--data_dir", default="/data/", type=str, help="dataset directory")
 parser.add_argument("--dataset", default="colon", type=str, help="dataset name")
 # parser.add_argument("--pretraining", action="store_true", help="use gradient checkpointing to save memory")
-parser.add_argument("--json_list", default="./jsons/brats21_folds.json", type=str, help="dataset json file")
+# parser.add_argument("--json_list", default="./jsons/brats21_folds.json", type=str, help="dataset json file")
 parser.add_argument("--save_checkpoint", action="store_true", help="save checkpoint during training")
 parser.add_argument("--max_epochs", default=3000, type=int, help="max number of training epochs")
 parser.add_argument("--batch_size", default=1, type=int, help="number of batch size")
