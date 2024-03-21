@@ -159,6 +159,23 @@ import cv2
 
 matching_criteria = dict()
 
+
+def normalize99(Y, lower=1,upper=99):
+    """ normalize image so 0.0 is 1st percentile and 1.0 is 99th percentile """
+    X = Y.copy()
+    x01 = np.percentile(X, lower)
+    x99 = np.percentile(X, upper)
+    X = (X - x01) / (x99 - x01)
+    return X
+
+def normalize(Y):
+    """ normalize image so 0.0 is 1st percentile and 1.0 is 99th percentile """
+    X = Y.copy()
+    # x01 = np.percentile(X, lower)
+    # x99 = np.percentile(X, upper)
+    X = (X - np.min(X)) / (np.max(X)- np.min(X))
+    return X
+
 def distance_to_boundary(masks):
     """ get distance to boundary of mask pixels
     

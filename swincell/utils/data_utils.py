@@ -118,7 +118,7 @@ def folder_loader(args):
     print('folder loader for tiff images')
     import os
     import glob
-    if args.fold is None:
+    if args.fold is None:  # if not specified, use 80% for training, 20% for validation
         N = len(os.listdir(os.path.join(args.data_dir,'images')))
         img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tif*')))
         label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tif*')))
@@ -134,7 +134,7 @@ def folder_loader(args):
         train_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 != 0]
         # end of split dataset
 
-    else:
+    else:  # if specified, use 60% for training, 20% for validation, 20% for testing
         N =len(os.listdir(os.path.join(args.data_dir,'images')))
         print('length of datasets',N)
         # whole dataset
@@ -156,19 +156,17 @@ def folder_loader(args):
     print(len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),'a')
 
     if args.dataset =='colon':
-        # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(1200,960,128))
-        # img_spatial_size= (1200//args.dsp,960//args.dsp,128//args.dsp)
-        # img_spatial_size= (1200,960,128)
+
         img_spatial_size= (1300,1030,129)
-        # print(img_spatial_size)
+
     elif args.dataset =='allen':
-        # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(900,600,64)),
+
         img_spatial_size= (900,600,64)
-        # transform_resize = None
+
     elif args.dataset =='nanolive':
-        # transform_resize = transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96))
+
         img_spatial_size = (512,512,96)
-        # transform_resize = None
+
     else:
         raise Warning("dataset not defined")
         transform_resize = None

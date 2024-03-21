@@ -1,6 +1,8 @@
 # flow generation algorithm from Cellpose, C. Stringer et al. 2021
-import time, os
+
+import  os,glob
 from scipy.ndimage import maximum_filter1d, find_objects
+from cellpose_utils import masks_to_edges
 import torch
 import numpy as np
 import tifffile
@@ -22,6 +24,43 @@ from torch import optim, nn
 TORCH_ENABLED = True 
 torch_GPU = torch.device('cuda')
 torch_CPU = torch.device('cpu')
+
+def normalize_to_uint8(I):
+    mn = I.min()
+    mx = I.max()
+    mx -= mn
+    I = ((I - mn)/mx) * 255
+    return I.astype(np.uint8)
+
+def batch_masks_to_flows(input_path,output_path,delete_edges=True,binary2sequential=False):
+    """ 
+    convert masks to flows and save as tiff
+    delete_edges: if True, remove edges of cells
+    binary2sequential: set to True for binary input. Set to False for semantic mask input
+    """
+    mask_input_files = glob.glob(input_path)
+    print(mask_input_files)
+    for file in mask_input_files:
+        mask = tifffile.imread(file)
+        if binary2sequential:
+            from skimage import measure
+            mask =  measure.label(mask)
+        output_image  = np.zeros((4,)+mask.shape,dtype=float)
+        output_file_name = file.split('/')[-1].split('.')[0]+'_mask_with_flow.tiff'
+
+        flows = masks_to_flows(mask)
+        print(flows.max(),flows.min())
+        flows = normalize_to_uint8(flows)
+        print(flows.max(),flows.min())
+        if delete_edges:
+            edges = masks_to_edges(mask.astype(np.uint8))
+            mask = (mask>0).astype(np.uint8) - edges
+ 
+       
+        
+        output_image[0,...] = mask
+        output_image[1:,...] = flows
+        tifffile.imwrite(output_path + output_file_name, np.uint8(output_image))
 
 @njit('(float64[:], int32[:], int32[:], int32, int32, int32, int32)', nogil=True)
 def _extend_centers(T,y,x,ymed,xmed,Lx, niter):
