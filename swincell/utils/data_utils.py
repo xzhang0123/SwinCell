@@ -27,6 +27,7 @@ import torch
 import numpy as np
 
 # from monai.utils.enums import TransformBackends
+
 class flow_reshape(Transform):
 
     # backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
@@ -63,6 +64,11 @@ class flow_reshaped(MapTransform):
             d[key] = self.converter(d[key])
         return d
         
+def split_dataset_82(dataset, split, shuffle=False, seed=0,return_dict=True):
+
+    N = len(dataset)
+    
+
 
 class Sampler(torch.utils.data.Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, make_even=True):
