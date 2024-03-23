@@ -1,14 +1,3 @@
-# Copyright 2020 - 2022 MONAI Consortium
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import os
 import pdb
 import shutil
@@ -43,7 +32,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             if args.cellpose:
                 loss_func1 = loss_func[0]
                 loss_func2 = loss_func[1]
-                #  weight_factor*flow loss     +      cell probability loss
+                #  weight_factor* flow loss     +      cell probability loss, weight_factor set to 5 according to paper
                 loss = 5*loss_func1(logits[:,1:], target[:,1:]) + loss_func2(logits[:,0], target[:,0])
 
             else:
@@ -107,11 +96,9 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_sig
                 logits = model_inferer(data)
             val_labels_list = decollate_batch(target)
             val_outputs_list = decollate_batch(logits) # a list of length 4 (number of input channels =4)
-            # print(val_outputs_list[2].shape,val_outputs_list[0].max(),val_outputs_list[0].min())
-            # y_pred need to binarized
+            # y_pred binarized
             # val_output_convert = [post_pred(post_sigmoid(val_pred_tensor[0])) for val_pred_tensor in val_outputs_list]
-            from monai.transforms import AsDiscrete
-            # post_pred = AsDiscrete(argmax=False, threshold=0.5)
+
             # cell probs channel
             val_output_convert = [post_pred(post_sigmoid(val_pred_tensor[0])) for val_pred_tensor in val_outputs_list]
             val_label_convert = [val_label_tensor[0] for val_label_tensor in val_labels_list]
@@ -119,7 +106,7 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_sig
             print(len(val_label_convert),len(val_output_convert),val_label_convert[0].shape,val_output_convert[0].shape)
             acc_func.reset()
             acc_func(y_pred=val_output_convert, y=val_label_convert)
-            #validate with only the binary masks for now, need to add another three classes
+            #validate with the binary masks 
             acc, not_nans = acc_func.aggregate()
             acc = acc.cuda(args.rank)
             if args.distributed:
@@ -154,7 +141,7 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_sig
             img_gt= img_gt.astype(np.uint8)
             # print(val_output_convert[0].shape)
             # img_pred = val_output_convert[0][0,:,:,:].detach().cpu().numpy()
-            img_pred = val_output_convert[0][:,:,:].detach().cpu().numpy() #modified for cellpose
+            img_pred = val_output_convert[0][:,:,:].detach().cpu().numpy() #modified for flows
 
             img_pred = (img_pred  - np.min(img_pred)) / (np.max(img_pred) - np.min(img_pred))
             img_pred  =np.max(img_pred,axis=-1)*255
@@ -236,17 +223,11 @@ def run_training(
             )
 
             if args.rank == 0:
-                # Dice_TC = val_acc[0]
-                # Dice_WT = val_acc[1]
-                # Dice_ET = val_acc[2]
+
                 print(
                     "Final validation stats {}/{}".format(epoch, args.max_epochs - 1),
                     ", Dice_Class1:",
                     val_acc[0],
-                    # ", Dice_Class2:",
-                    # val_acc[1],
-                    # ", Dice_ET:",
-                    # Dice_ET,
                     ", time {:.2f}s".format(time.time() - epoch_time),
                 )
                 print(epoch, val_acc)
@@ -276,7 +257,7 @@ def run_training(
             if args.rank == 0 and args.logdir is not None:
                 save_checkpoint(model, epoch, args, best_acc=val_acc_max, filename="model_final.pt")
                 if b_new_best:
-                    print("Copying to model.pt new best model!!!!")
+                    print("new best model, saving model.pt")
                     shutil.copyfile(os.path.join(args.logdir, "model_final.pt"), os.path.join(args.logdir, "model.pt"))
 
         if scheduler is not None:

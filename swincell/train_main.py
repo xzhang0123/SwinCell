@@ -21,7 +21,7 @@ from torch.nn import MSELoss,BCEWithLogitsLoss
 
 from monai.metrics import DiceMetric
 
-from monai.networks.nets import SwinUNETR, UNet,UNETR
+from monai.networks.nets import SwinUNETR, UNet
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 
@@ -48,14 +48,14 @@ parser.add_argument("--val_every", default=100, type=int, help="validation frequ
 parser.add_argument("--distributed", action="store_true", help="start distributed training")
 parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
 parser.add_argument("--rank", default=0, type=int, help="node rank for distributed training")
-parser.add_argument("--dist-url", default="tcp://127.0.0.1:23456", type=str, help="distributed url")
-parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
+# parser.add_argument("--dist-url", default="tcp://127.0.0.1:23456", type=str, help="distributed url")
+# parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
 parser.add_argument("--norm_name", default="instance", type=str, help="normalization name")
 parser.add_argument("--workers", default=8, type=int, help="number of workers")
 parser.add_argument("--feature_size", default=48, type=int, help="feature size")
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
 parser.add_argument("--out_channels", default=1, type=int, help="number of output channels, num_of_classes")
-parser.add_argument("--cache_dataset", action="store_true", help="use monai Dataset class")
+# parser.add_argument("--cache_dataset", action="store_true", help="use monai Dataset class")
 parser.add_argument("--a_min", default=300.0, type=float, help="a_min in ScaleIntensityRanged")
 parser.add_argument("--a_max", default=450.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
@@ -66,20 +66,20 @@ parser.add_argument("--space_z", default=2.0, type=float, help="spacing in z dir
 parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
 parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
 parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
-parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
-parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
-parser.add_argument("--RandFlipd_prob", default=0.2, type=float, help="RandFlipd aug probability")
-parser.add_argument("--RandRotate90d_prob", default=0.2, type=float, help="RandRotate90d aug probability")
-parser.add_argument("--RandScaleIntensityd_prob", default=0.1, type=float, help="RandScaleIntensityd aug probability")
-parser.add_argument("--RandShiftIntensityd_prob", default=0.1, type=float, help="RandShiftIntensityd aug probability")
-parser.add_argument("--infer_overlap", default=0.5, type=float, help="sliding window inference overlap")
-parser.add_argument("--lrschedule", default="warmup_cosine", type=str, help="type of learning rate scheduler")
+# parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
+# parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
+# parser.add_argument("--RandFlipd_prob", default=0.2, type=float, help="RandFlipd aug probability")
+# parser.add_argument("--RandRotate90d_prob", default=0.2, type=float, help="RandRotate90d aug probability")
+# parser.add_argument("--RandScaleIntensityd_prob", default=0.1, type=float, help="RandScaleIntensityd aug probability")
+# parser.add_argument("--RandShiftIntensityd_prob", default=0.1, type=float, help="RandShiftIntensityd aug probability")
+# parser.add_argument("--infer_overlap", default=0.5, type=float, help="sliding window inference overlap")
+# parser.add_argument("--lrschedule", default="warmup_cosine", type=str, help="type of learning rate scheduler")
 parser.add_argument("--warmup_epochs", default=50, type=int, help="number of warmup epochs")
 parser.add_argument("--resume_ckpt", action="store_true", help="resume training from pretrained checkpoint")
-parser.add_argument("--cellpose", action="store_true", help="cellpose tyle training, including flow channels")
+parser.add_argument("--use_flows", action="store_true", help="cellpose style training, including flow channels")
 parser.add_argument("--save_temp_img", action="store_true", help="save temp predicted images during traning")
-parser.add_argument("--smooth_dr", default=1e-6, type=float, help="constant added to dice denominator to avoid nan")
-parser.add_argument("--smooth_nr", default=0.0, type=float, help="constant added to dice numerator to avoid zero")
+# parser.add_argument("--smooth_dr", default=1e-6, type=float, help="constant added to dice denominator to avoid nan")
+# parser.add_argument("--smooth_nr", default=0.0, type=float, help="constant added to dice numerator to avoid zero")
 parser.add_argument("--use_ssl_pretrained", action="store_true", help="Use SSL")
 parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
@@ -120,7 +120,7 @@ def main_worker(gpu, args):
     torch.cuda.set_device(args.gpu)
     torch.backends.cudnn.benchmark = True
     args.test_mode = False
-    # loader = get_loader_Allen_tiff(args)
+    # loader = get_loader_Allen_tiff(args)  # for allencell dataset
     loader = folder_loader(args)
     print(args.rank, " gpu", args.gpu)
     if args.rank == 0:
@@ -182,7 +182,7 @@ def main_worker(gpu, args):
             raise ValueError("Self-supervised pre-trained weights not available for" + str(args.model_name))
 
 
-    if args.cellpose:
+    if args.use_flows:
         dice_loss1 = MSELoss(reduction='mean')
         dice_loss2 = DiceLoss(to_onehot_y=False, sigmoid=True)
         # dice_loss2 = BCEWithLogitsLoss(reduction='mean')
