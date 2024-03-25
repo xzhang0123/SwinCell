@@ -49,7 +49,7 @@ conda acivate swincell
 sh python ./swincell/train_main.py --data_dir=<data_dir> --val_every=<valid_every_N_ephochs> --model 'swin'  --logdir <log_dir> --max_epochs 100 --roi_x=64 --roi_y=64 --roi_z=32  --feature_size=48 \
 ```
 ## Model inference
-TO DO 
+[model_inference.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/)
 
 
 ```bash

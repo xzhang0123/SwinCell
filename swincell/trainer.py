@@ -181,7 +181,7 @@ def run_training(
         writer = SummaryWriter(log_dir=args.logdir)
         if args.rank == 0:
             print("Writing Tensorboard logs to ", args.logdir)
-    scaler = None
+    # scaler = None
 
     val_acc_max = 0.0
     for epoch in range(start_epoch, args.max_epochs):
@@ -191,7 +191,7 @@ def run_training(
         print(args.rank, time.ctime(), "Epoch:", epoch)
         epoch_time = time.time()
         train_loss, train_img_list = train_epoch(
-            model, train_loader, optimizer, scaler=scaler, epoch=epoch, loss_func=loss_func, args=args
+            model, train_loader, optimizer, epoch=epoch, loss_func=loss_func, args=args
         )
         if args.rank == 0:
             print(
