@@ -49,10 +49,8 @@ conda acivate swincell
 sh python ./swincell/train_main.py --data_dir=<data_dir> --val_every=<valid_every_N_ephochs> --model 'swin'  --logdir <log_dir> --max_epochs 100 --roi_x=64 --roi_y=64 --roi_z=32  --feature_size=48 \
 ```
 ## Model inference
-[model_inference.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/)
+[model_inference](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/)
 
-
-```bash
 ## trouble shooting/common mistakes:
 * feature size of swin-transformer must be divisible by 32, error raises otherwise
 * final ROI size (patch size) must be larger than input image after downsampling (if dsp>1)
