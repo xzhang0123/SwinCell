@@ -53,6 +53,6 @@ TO DO
 
 
 ```bash
-#trouble shooting/common mistakes:
-#feature size of swin-transformer must be divisible by 32, error raises otherwise
-#final ROI size (patch size) must be larger than input image after downsampling (if dsp>1)
+## trouble shooting/common mistakes:
+* feature size of swin-transformer must be divisible by 32, error raises otherwise
+* final ROI size (patch size) must be larger than input image after downsampling (if dsp>1)

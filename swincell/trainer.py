@@ -14,7 +14,7 @@ from swincell.utils.utils import AverageMeter, distributed_all_gather
 from monai.data import decollate_batch
 
 
-def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
+def train_epoch(model, loader, optimizer, epoch, loss_func, args):
     model.train()
     start_time = time.time()
     run_loss = AverageMeter()
@@ -26,10 +26,10 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
         data, target = data.cuda(args.rank), target.cuda(args.rank)
         for param in model.parameters():
             param.grad = None
-        with autocast(enabled=args.amp):
+        with autocast(enabled=False):
             logits = model(data)
             # print(logits.shape,target.shape)
-            if args.cellpose:
+            if args.use_flows:
                 loss_func1 = loss_func[0]
                 loss_func2 = loss_func[1]
                 #  weight_factor* flow loss     +      cell probability loss, weight_factor set to 5 according to paper
@@ -38,13 +38,9 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             else:
                 # print(logits.shape,target.shape)
                 loss = loss_func(logits[:,0], target[:,0])
-        if args.amp:
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            loss.backward()
-            optimizer.step()
+
+        loss.backward()
+        optimizer.step()
         if args.distributed:
             loss_list = distributed_all_gather([loss], out_numpy=True, is_valid=idx < loader.sampler.valid_length)
             run_loss.update(
@@ -92,7 +88,7 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_sig
         for idx, batch_data in enumerate(loader):
             data, target = batch_data["image"], batch_data["label"]
             data, target = data.cuda(args.rank), target.cuda(args.rank)
-            with autocast(enabled=args.amp):
+            with autocast(enabled=False):
                 logits = model_inferer(data)
             val_labels_list = decollate_batch(target)
             val_outputs_list = decollate_batch(logits) # a list of length 4 (number of input channels =4)
@@ -186,8 +182,7 @@ def run_training(
         if args.rank == 0:
             print("Writing Tensorboard logs to ", args.logdir)
     scaler = None
-    if args.amp:
-        scaler = GradScaler()
+
     val_acc_max = 0.0
     for epoch in range(start_epoch, args.max_epochs):
         if args.distributed:
