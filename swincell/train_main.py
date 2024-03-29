@@ -58,8 +58,8 @@ parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x dir
 parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
 parser.add_argument("--space_z", default=2.0, type=float, help="spacing in z direction")
 parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
-parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
-parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
+parser.add_argument("--roi_y", default=32, type=int, help="roi size in y direction")
+parser.add_argument("--roi_z", default=32, type=int, help="roi size in z direction")
 parser.add_argument("--warmup_epochs", default=50, type=int, help="number of warmup epochs")
 parser.add_argument("--resume_ckpt", action="store_true", help="resume training from pretrained checkpoint")
 parser.add_argument("--use_flows", action="store_true", help="cellpose style training, including flow channels")
@@ -236,7 +236,7 @@ def main_worker(gpu, args):
     else:
         scheduler = None
 
-    semantic_classes = ["Dice_Val_Class", "Dice_Val_Class2", "Dice_Val_Class3"]
+    semantic_classes = ["Class1", "Class2", "Class3"]
 
     accuracy = run_training(
         model=model,

@@ -14,7 +14,7 @@ amax=100
 
 for fold in {1..5}
 do
-	python finetune_main_cellpose.py --json_list='' --data_dir=$data_dir --val_every=100 --noamp --distributed --model 'unet' \
+	python ./swincell/train_main.py --data_dir=$data_dir --val_every=100 --distributed --model 'unet' \
  --pretrained_model_name=$pre_trained_model --a_min=$amin --a_max=$amax --logdir $log_dir --max_epochs 10000 --dsp 1 --fold $fold \
 --roi_x=128 --roi_y=128 --roi_z=32  --in_channels=1 --out_channels=1 --spatial_dims=3 --use_checkpoint --feature_size=48 --save_checkpoint  \
 #--use_ssl_pretrained
