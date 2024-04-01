@@ -31,7 +31,7 @@ pip install swincell
     │   └── labels         # ground truth semantic label. 0=background, 1=cell
     └── ...
 ## Demo data
-[Nanolive Demo Dataset] (https://brookhavenlab-my.sharepoint.com/:f:/g/personal/xzhang4_bnl_gov/EsDdL48uEmRKskKE5OCOX4cBaOXSdmS-YGWDxlS7_lgExA?e=WyDpCh)
+[Nanolive Demo Dataset](https://brookhavenlab-my.sharepoint.com/:f:/g/personal/xzhang4_bnl_gov/EsDdL48uEmRKskKE5OCOX4cBaOXSdmS-YGWDxlS7_lgExA?e=WyDpCh)
 ## Model training
 ### Model training with jupyter-notebook
 1. add the SwinCell environment as a new kernel to your Jupyter Notebook: 
