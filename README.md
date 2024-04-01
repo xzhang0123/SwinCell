@@ -30,6 +30,8 @@ pip install swincell
     │   ├── images         # raw images in tiff format
     │   └── labels         # ground truth semantic label. 0=background, 1=cell
     └── ...
+## Demo data
+[Nanolive Demo Dataset] (https://brookhavenlab-my.sharepoint.com/:f:/g/personal/xzhang4_bnl_gov/EsDdL48uEmRKskKE5OCOX4cBaOXSdmS-YGWDxlS7_lgExA?e=WyDpCh)
 ## Model training
 ### Model training with jupyter-notebook
 1. add the SwinCell environment as a new kernel to your Jupyter Notebook: 
@@ -51,6 +53,6 @@ sh python ./swincell/train_main.py --data_dir=<data_dir> --val_every=<valid_ever
 ## Model inference
 [model_inference](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/)
 
-## trouble shooting/common mistakes:
+## Trouble shooting/common mistakes:
 * feature size of swin-transformer must be divisible by 32, error raises otherwise
 * final ROI size (patch size) must be larger than input image after downsampling (if dsp>1)

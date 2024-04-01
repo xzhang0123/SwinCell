@@ -176,6 +176,38 @@ def normalize(Y):
     X = (X - np.min(X)) / (np.max(X)- np.min(X))
     return X
 
+def fill_small_holes_3d_test(masks, min_size=1000,bin_closing_structure=np.ones((5,5,3)).astype(int)):
+    from scipy.ndimage import find_objects, binary_fill_holes, binary_closing
+    from scipy.ndimage import label
+    print('test function')
+    masks = masks.copy()
+    masks,num_features = label(masks)
+    slices = find_objects(masks)
+    j = 0
+    for i,slc in enumerate(slices):
+        if slc is not None:
+            msk = masks[slc] == (i+1)
+            npix = msk.sum()
+            # if min_size > 0 and npix < min_size:
+            #     print('delete')
+            #     masks[slc][msk] = 0
+            if npix > 0:  
+                # if bin_closing_structure is not None:
+                #     for _ in range(1): # repeat 3 times
+                #         msk = binary_closing(msk,bin_closing_structure)
+                if msk.ndim==3:
+                    
+                    for k in range(msk.shape[0]):
+  
+                        msk[k] = binary_closing(msk[k],bin_closing_structure)
+                        msk[k] = binary_fill_holes(msk[k])
+                
+                else:          
+                    msk = binary_fill_holes(msk)
+                # masks[slc][msk] = (j+1)
+                masks[slc][msk] = (j+1)
+                j+=1
+    return masks
 def distance_to_boundary(masks):
     """ get distance to boundary of mask pixels
     
