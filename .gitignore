@@ -5,8 +5,8 @@ future_works
 __pycache__/
 pretrained_models
 runs
-*.tiff
-*.pt #trained models
+*.tif*
+*.pt
 *.csv
 *.mod*
 Nanolive_2d*
