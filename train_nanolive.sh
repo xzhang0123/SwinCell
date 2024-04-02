@@ -1,11 +1,15 @@
 
 
+root_dir=""
+data_dir="./Nanolive_dataset/"
+roi_x=128   
+roi_y=128
+roi_z=32
+v_min=1
+v_max=255
 
-#output_path=""
-#data_dir="/home/xzhang/Projects/cellpose/Nanolive_mem_cellpose_data_v5_nor_augmented"
-data_dir="/home/xzhang/Projects/cellpose/Nanolive_mem_cellpose_data_v5_nor_1_99"
-log_dir="Nanolive_mem_cellpose_unet_128_128_32_v6_nor_dsp1_test_contrast_scratch_no_aug_5fold"
-#pre_trained_model='/home/xzhang/Projects/cellpose/pretrained_models/nanolive_v6_swinunet_cellpose_nor.pt'
+log_dir="./results/nanolive_"$roi_x"_"$roi_y"_"$roi_z"_"$v_min"_"$v_max"_$data_folder"
+
 pre_trained_model=''
 amin=1
 amax=100
@@ -14,9 +18,8 @@ amax=100
 
 for fold in {1..5}
 do
-	python ./swincell/train_main.py --data_dir=$data_dir --val_every=100 --distributed --model 'swin' \
- --pretrained_model_name=$pre_trained_model --a_min=$amin --a_max=$amax --logdir $log_dir --max_epochs 5000 --dsp 1 --fold $fold \
---roi_x=128 --roi_y=128 --roi_z=32  --in_channels=1 --out_channels=4 --spatial_dims=3 --use_checkpoint --feature_size=48 --save_checkpoint --use_flows \
+	python ./swincell/train_main.py --data_dir=$data_dir --val_every=1 --distributed --model 'swin' --a_min=$v_min --a_max=$v_max --logdir $log_dir --max_epochs 5 --dsp 1 --fold $fold \
+--roi_x=128 --roi_y=128 --roi_z=32  --use_checkpoint --feature_size=48 --save_checkpoint --use_flows \
 
 sleep 200
 done

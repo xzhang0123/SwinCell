@@ -1,11 +1,12 @@
 tests
+results
 future_works
 *.log
 __pycache__/
 pretrained_models
 runs
 *.tiff
-.pt #trained models
+*.pt #trained models
 *.csv
 *.mod*
 Nanolive_2d*

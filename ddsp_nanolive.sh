@@ -1,4 +1,4 @@
-
+# training with different downsampling rate
 
 
 #output_path=""

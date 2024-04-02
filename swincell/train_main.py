@@ -27,7 +27,7 @@ from monai.utils.enums import MetricReduction
 
 parser = argparse.ArgumentParser(description="SwinCell Training")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
-parser.add_argument("--logdir", default="test", type=str, help="directory to save the tensorboard logs")
+parser.add_argument("--logdir", default="./results/test", type=str, help="directory to save the tensorboard logs")
 parser.add_argument("--fold", default=None, type=int, help="divide data into folds, and perform cross validation")
 parser.add_argument("--model", default="swin", type=str, help="Model Architecture")
 parser.add_argument("--pretrained_model_name", default="model.pt", type=str, help="pretrained model name")
@@ -49,17 +49,19 @@ parser.add_argument("--norm_name", default="instance", type=str, help="normaliza
 parser.add_argument("--workers", default=8, type=int, help="number of workers")
 parser.add_argument("--feature_size", default=48, type=int, help="feature size")
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
-parser.add_argument("--out_channels", default=1, type=int, help="number of output channels, num_of_classes")
-parser.add_argument("--a_min", default=300.0, type=float, help="a_min in ScaleIntensityRanged")
-parser.add_argument("--a_max", default=450.0, type=float, help="a_max in ScaleIntensityRanged")
-parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
-parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
-parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
-parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
-parser.add_argument("--space_z", default=2.0, type=float, help="spacing in z direction")
+parser.add_argument("--out_channels", default=4, type=int, help="number of output channels, #cell probability channel + #flow channels")
+parser.add_argument("--a_min", default=300.0, type=float, help="cliped min input value")
+parser.add_argument("--a_max", default=450.0, type=float, help="cliped max input value")
+parser.add_argument("--b_min", default=0.0, type=float, help="min target (output) value")
+parser.add_argument("--b_max", default=1.0, type=float, help="max target value")
+parser.add_argument("--space_x", default=1, type=float, help="spacing in x direction")
+parser.add_argument("--space_y", default=1, type=float, help="spacing in y direction")
+parser.add_argument("--space_z", default=1, type=float, help="spacing in z direction")
 parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
-parser.add_argument("--roi_y", default=32, type=int, help="roi size in y direction")
+parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
 parser.add_argument("--roi_z", default=32, type=int, help="roi size in z direction")
+parser.add_argument("--infer_overlap", default=0.5, type=float, help="sliding window inference overlap")
+parser.add_argument("--lrschedule", default="warmup_cosine", type=str, help="type of learning rate scheduler")
 parser.add_argument("--warmup_epochs", default=50, type=int, help="number of warmup epochs")
 parser.add_argument("--resume_ckpt", action="store_true", help="resume training from pretrained checkpoint")
 parser.add_argument("--use_flows", action="store_true", help="cellpose style training, including flow channels")
@@ -68,18 +70,17 @@ parser.add_argument("--use_ssl_pretrained", action="store_true", help="Use SSL")
 parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
 parser.add_argument("--dsp", default=1, type=int, help="downsampling rate of input data, increase it when input images have very high resolution")
-parser.add_argument(
-    "--pretrained_dir",
-    default="./pretrained_models/",
-    type=str,
-    help="pretrained checkpoint directory",
-)
+parser.add_argument("--pretrained_dir",default="./pretrained_models/",type=str,help="pretrained checkpoint directory",)
 
 
 
 def main():
     args = parser.parse_args()
-    args.logdir = "./runs/" + args.logdir +'/fold'+str(args.fold)
+    if args.fold:
+        args.logdir = "./" + args.logdir +'/fold'+str(args.fold)
+    else:
+        args.logdir = "./" + args.logdir
+
     if args.distributed:
         args.ngpus_per_node = torch.cuda.device_count()
         print("Found total gpus", args.ngpus_per_node)
@@ -98,12 +99,12 @@ def main_worker(gpu, args):
     if args.distributed:
         args.rank = args.rank * args.ngpus_per_node + gpu
         dist.init_process_group(
-            backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank
+            backend='nccl', init_method="tcp://127.0.0.1:23456", world_size=args.world_size, rank=args.rank
         )
     torch.cuda.set_device(args.gpu)
     torch.backends.cudnn.benchmark = True
     args.test_mode = False
-    # loader = get_loader_Allen_tiff(args)  # for allencell dataset
+    # loader = get_loader_Allen_tiff(args)  # Loader for allencell dataset
     loader = folder_loader(args)
     print(args.rank, " gpu", args.gpu)
     if args.rank == 0:
@@ -111,7 +112,7 @@ def main_worker(gpu, args):
     inf_size = [args.roi_x, args.roi_y, args.roi_z]
 
     pretrained_pth = args.pretrained_model_name
-    if args.model =='unet':
+    if args.model =='unet':  # used for ablation study
         model = UNet(
             # img_size=(args.roi_x, args.roi_y, args.roi_z),
             spatial_dims=args.spatial_dims,
@@ -120,8 +121,7 @@ def main_worker(gpu, args):
             channels=(16, 32, 64, 128, 256),
             strides=(2, 2, 2, 2, 2),
             
-            # feature_size=args.feature_size,
-            # use_checkpoint=args.use_checkpoint,
+
         )
     elif args.model =='swin':
         model = SwinUNETR(
@@ -142,7 +142,6 @@ def main_worker(gpu, args):
     if args.use_ssl_pretrained:
         try:
             model_dict = torch.load(pretrained_pth)
-            #model_dict = torch.load("./pretrained_models/allen2_resized_96_300_model_final_epoch.pt")
             print('SSL model loaded')
             state_dict = model_dict["state_dict"]
             
@@ -156,9 +155,6 @@ def main_worker(gpu, args):
                 print("Tag 'swin_vit' found in state dict - fixing!")
                 for key in list(state_dict.keys()):
                     state_dict[key.replace("swin_vit", "swinViT")] = state_dict.pop(key)
-            # We now load model weights, setting param `strict` to False, i.e.:
-            # this load the encoder weights (Swin-ViT, SSL pre-trained), but leaves
-            # the decoder weights untouched (CNN UNet decoder).
             model.load_state_dict(state_dict, strict=False)
             print("Using pretrained self-supervised Swin UNETR backbone weights !")
         except ValueError:
@@ -168,7 +164,6 @@ def main_worker(gpu, args):
     if args.use_flows:
         dice_loss1 = MSELoss(reduction='mean')
         dice_loss2 = DiceLoss(to_onehot_y=False, sigmoid=True)
-        # dice_loss2 = BCEWithLogitsLoss(reduction='mean')
         dice_loss = [dice_loss1,dice_loss2]
     else:
         dice_loss = DiceLoss(
@@ -186,8 +181,8 @@ def main_worker(gpu, args):
         predictor=model,
         overlap=args.infer_overlap,
     )
-    pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print("Total parameters count", pytorch_total_params)
+    # pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # print("Total parameters count", pytorch_total_params)
 
     best_acc = 0
     start_epoch = 0

@@ -8,7 +8,7 @@ import torch
 import torch.nn.parallel
 import torch.utils.data.distributed
 from tensorboardX import SummaryWriter
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import autocast
 from swincell.utils.utils import AverageMeter, distributed_all_gather
 
 from monai.data import decollate_batch
@@ -64,6 +64,7 @@ def train_epoch(model, loader, optimizer, epoch, loss_func, args):
         img_raw = img_raw.astype(np.uint8)
         #dimenstion is (batch_size, channel, height, width) 
         img_gt= target[0,0,:,:,:].detach().cpu().numpy()
+        # if normalize:
         # img_gt= (img_gt - np.min(img_gt)) / (np.max(img_gt) - np.min(img_gt))
         img_gt =np.max(img_gt,axis=-1)*255
         img_gt= img_gt.astype(np.uint8)
@@ -92,14 +93,12 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_sig
                 logits = model_inferer(data)
             val_labels_list = decollate_batch(target)
             val_outputs_list = decollate_batch(logits) # a list of length 4 (number of input channels =4)
-            # y_pred binarized
-            # val_output_convert = [post_pred(post_sigmoid(val_pred_tensor[0])) for val_pred_tensor in val_outputs_list]
 
             # cell probs channel
             val_output_convert = [post_pred(post_sigmoid(val_pred_tensor[0])) for val_pred_tensor in val_outputs_list]
             val_label_convert = [val_label_tensor[0] for val_label_tensor in val_labels_list]
 
-            print(len(val_label_convert),len(val_output_convert),val_label_convert[0].shape,val_output_convert[0].shape)
+            # print(len(val_label_convert),len(val_output_convert),val_label_convert[0].shape,val_output_convert[0].shape)
             acc_func.reset()
             acc_func(y_pred=val_output_convert, y=val_label_convert)
             #validate with the binary masks 
@@ -225,7 +224,7 @@ def run_training(
                     val_acc[0],
                     ", time {:.2f}s".format(time.time() - epoch_time),
                 )
-                print(epoch, val_acc)
+                # print(epoch, val_acc)
                 if writer is not None:
                     writer.add_scalar("Mean_Val_Dice", np.mean(val_acc), epoch)
                     if args.save_temp_img:
