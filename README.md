@@ -3,7 +3,7 @@
 
 ## Requiments
 see requiments.txt
-## Geting Started
+## Getting Started
 ### Create the environment:
 ```bash
 conda create --name swincell numpy==1.21.5
