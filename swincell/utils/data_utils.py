@@ -9,9 +9,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import math
-import os
+import os,glob, random
 
 import libtiff
 libtiff.libtiff_ctypes.suppress_warnings()
@@ -23,8 +22,7 @@ from natsort import natsorted
 from monai import data, transforms
 
 from monai.transforms import  Transform, MapTransform
-import torch
-import numpy as np
+
 
 # from monai.utils.enums import TransformBackends
 
@@ -64,9 +62,64 @@ class flow_reshaped(MapTransform):
             d[key] = self.converter(d[key])
         return d
         
-def split_dataset_82(dataset, split, shuffle=False, seed=0,return_dict=True):
+def split_dataset(root_data_dir, split_ratios, shuffle=False, seed=0,dict_keys=True):
+    
+    assert sum(split_ratios) == 1, "Split ratios must sum to 1"
 
-    N = len(dataset)
+    
+    all_images = natsorted(glob.glob(os.path.join(root_data_dir,'images/*tif*')))
+    all_labels = natsorted(glob.glob(os.path.join(root_data_dir,'masks_with_flows/*tif*')))
+    assert len(all_images) == len(all_labels), "Number of images and labels must match"
+
+    if shuffle:       #shuffle the files to ensure random distribution
+        random.seed(seed)
+        random.shuffle(all_images)
+        random.shuffle(all_labels)
+
+    
+    # Determine the split index
+    if len(split_ratios) == 2:
+        split_index = int(len(all_images) * split_ratios[0])
+        train_images = all_images[:split_index]
+        validation_images = all_images[split_index:]
+        train_labels = all_labels[:split_index]
+        validation_labels = all_labels[split_index:]
+    elif len(split_ratios) == 3:
+        train_end_index= int(len(all_images) * split_ratios[0])
+        val_end_index = int(len(all_images) * split_ratios[1])
+
+        train_images = all_images[:train_end_index]
+        validation_images = all_images[train_end_index:val_end_index]
+        test_images = all_images[val_end_index:]
+
+        train_labels = all_labels[:train_end_index]
+        validation_labels = all_labels[train_end_index:val_end_index]
+        test_labels = all_labels[val_end_index:]
+
+    else:
+        raise ValueError("Invalid split ratios")
+    
+    if dict_keys:
+
+        if len(split_ratios) == 2:
+            train_datalist = [{'image':image,'label':label} for image,label in zip(train_images,train_labels)] 
+            validation_datalist = [{'image':image,'label':label} for image,label in zip(validation_images,validation_labels)]
+
+            return train_datalist, validation_datalist
+        elif len(split_ratios) == 3:
+            train_datalist= [{'image':image,'label':label} for image,label in zip(train_images,train_labels)]
+            validation_datalist = [{'image':image,'label':label} for image,label in zip(validation_images,validation_labels)]
+            test_datalist = [{'image':image,'label':label} for image,label in zip(test_images,test_labels)]
+
+            return train_datalist, validation_datalist, test_datalist
+    else:
+
+        if len(split_ratios) == 2:
+            return train_images, validation_images
+        elif len(split_ratios) == 3:
+            return train_images, validation_images, test_images
+    
+
     
 
 
@@ -182,23 +235,16 @@ def folder_loader(args):
             transforms.LoadImaged(keys=["image", "label"]),
             transforms.EnsureChannelFirstd(keys=["image", "label"]),
             flow_reshaped(keys=["label"]),
-            # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
-            # transforms.AsDiscreted(keys=["label"],threshold=1),
-
-            # transforms.AddChanneld(keys=["image", "label"]),
-            #----------------------------for multichannel-----------------------
+            #----------------------------for multichannel image-----------------------
             # transforms.AddChanneld(keys=["image"]),
             # transforms.ConvertToMultiChannelNanolived(keys="label"),
-            #----------------------------for single channel-----------------------
+            #----------------------------for single channel image-----------------------
             # transforms.AddChanneld(keys=["image","label"]),
             # transforms.AsDiscreted(keys=["label"],threshold=1),
             #----------------------------------------------------------------
-            # transforms.AddChanneld(keys=["image"]),
             # transform_resize,
 	        transforms.Resized(keys=["image", "label"],spatial_size=img_spatial_size),
-            # transforms.Resized(keys=["image", "label"],spatial_size=(900,600,64)),  #for allen cell only
-            # transforms.Resized(keys=["image", "label"],spatial_size=(1200,960,128)),  #for colon dataset
-            # transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96)),  #for nanolive
+
             
             # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
             # transforms.Spacingd(
@@ -214,13 +260,8 @@ def folder_loader(args):
                 random_center=True,
                 random_size=False,
             ),
-            # transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=0),
-            # transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=1),
-            # transforms.RandFlipd(keys=["image", "label"], prob=args.RandFlipd_prob, spatial_axis=2),
-            # transforms.RandRotate90d(keys=["image", "label"], prob=args.RandRotate90d_prob, max_k=3),
             # transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
             # transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
-            # transforms.RepeatChanneld(keys='label',repeats= 4),
             transforms.ToTensord(keys=["image", "label"]),
         ]
     )
@@ -229,8 +270,6 @@ def folder_loader(args):
             transforms.LoadImaged(keys=["image", "label"]),
             transforms.EnsureChannelFirstd(keys=["image", "label"]),
             flow_reshaped(keys=["label"]),
-            # transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
-            # transforms.AsDiscreted(keys=["label"],threshold=1),
             #----------------------------for multichannel-----------------------
             # transforms.AddChanneld(keys=["image"]),
             # transforms.ConvertToMultiChannelNanolived(keys="label"),
@@ -239,19 +278,14 @@ def folder_loader(args):
             # transforms.AsDiscreted(keys=["label"],threshold=1),
             #----------------------------------------------------------------
 
-            # transforms.AsDiscreted(keys=["label"],to_onehot=2),
-	        # transforms.Resized(keys=["image", "label"],spatial_size=(512,512,96)),
-            # transforms.Resized(keys=["image", "label"],spatial_size=(900,600,64)),  #for allen cell only
-            # transforms.Resized(keys=["image", "label"],spatial_size=(1200,960,128)),  #for colon dataset
             transforms.Resized(keys=["image", "label"],spatial_size=img_spatial_size),  #for nanolive
             # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
             # transforms.Spacingd(
             #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
-            # ),
+            # ),   # for  anisotropic datasets
             transforms.ScaleIntensityRanged(
                 keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
             ),
-            # need to add this to ensure the images have the same sizes, when all the images are the same size, this can be removed
             transforms.RandSpatialCropSamplesd(
                 keys=["image","label"],
                 roi_size=[args.roi_x, args.roi_y, args.roi_z],
@@ -267,12 +301,6 @@ def folder_loader(args):
         [
             transforms.LoadImaged(keys=["image", "label"]),
             transforms.AsDiscreted(keys=["label"],threshold=1),
-            # transforms.AddChanneld(keys=["image", "label"]),
-            # transforms.Orientationd(keys=["image"], axcodes="RAS"),
-            # transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
-            # transforms.ScaleIntensityRanged(
-            #     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
-            # ),
             transforms.ToTensord(keys=["image", "label"]),
         ]
     )

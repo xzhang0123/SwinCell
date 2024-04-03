@@ -60,30 +60,6 @@ def background_sub(img, r):
     struct_img = (struct_img_smooth_sub - struct_img_smooth_sub.min())/(struct_img_smooth_sub.max()-struct_img_smooth_sub.min())
     return struct_img
 
-def get_random_cmap(num, seed=1, background=1):
-    """
-    Generate a random cmap
-
-    Parameters
-    ----------
-    num : int
-        The number of colors to be generated
-    seed : int
-        The same value will lead to the same cmap
-    BACKGROUND : int
-        The color of the background
-    Returns
-    -------
-    cmap : matplotlib.colors.Colormap
-        The generated cmap
-    """
-    vals = np.linspace(0, 1, num + 1)
-    np.random.seed(seed)
-    np.random.shuffle(vals)
-    vals = np.concatenate(([0], vals[1:]))
-    cmap = plt.cm.colors.ListedColormap(plt.cm.rainbow(vals))
-    cmap.colors[0, :3] = background
-    return cmap
 
 def volume_render_color(input_img,a=0.01,seed = 1):
     import cv2
