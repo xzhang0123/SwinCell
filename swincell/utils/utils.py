@@ -2,6 +2,38 @@
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+import tifffile
+
+def load_default_config():
+    from types import SimpleNamespace
+    args = SimpleNamespace(
+    data_dir =None,
+    dataset='colon',
+    checkpoint=None,
+    rank=0,
+    a_min=0,
+    a_max=255,
+    b_min=0,
+    b_max=1,
+    batch_size=1,
+    max_epochs=1000,
+    optim_lr=1e-5,
+    model='swin',
+    distributed=False,
+    optimizer='adam',
+    save_temp_img=False,
+    downsample_factor =1, # downsample the input image if resolution is too high
+    weight_decay=0.0001,
+    feature_size=48,
+    use_flows=True,
+    roi_x=128,
+    roi_y=128,
+    roi_z=32,
+    fold=None,
+    workers=8,
+
+)
+    return args
 
 
 def get_random_cmap(num, seed=1, background=1):
@@ -144,23 +176,9 @@ def distributed_all_gather(
     return tensor_list_out
 
 
-# MASK Matching algorithm used by stardist algorithm:
-
-import numpy as np
-
-from numba import jit
-from tqdm import tqdm
-from scipy.optimize import linear_sum_assignment
-from skimage.measure import regionprops
-from collections import namedtuple
-from csbdeep.utils import _raise
-from scipy.ndimage import find_objects
-import cv2
-
-matching_criteria = dict()
 
 
-def normalize99(Y, lower=1,upper=99):
+def normalize_image_percentile(Y, lower=1,upper=99):
     """ normalize image so 0.0 is 1st percentile and 1.0 is 99th percentile """
     X = Y.copy()
     x01 = np.percentile(X, lower)
@@ -208,6 +226,24 @@ def fill_small_holes_3d_test(masks, min_size=1000,bin_closing_structure=np.ones(
                 masks[slc][msk] = (j+1)
                 j+=1
     return masks
+
+
+# MASK Matching algorithm used by stardist algorithm:
+
+import numpy as np
+
+from numba import jit
+from tqdm import tqdm
+from scipy.optimize import linear_sum_assignment
+from skimage.measure import regionprops
+from collections import namedtuple
+from csbdeep.utils import _raise
+from scipy.ndimage import find_objects
+import cv2
+
+matching_criteria = dict()
+
+
 def distance_to_boundary(masks):
     """ get distance to boundary of mask pixels
     

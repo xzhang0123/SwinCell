@@ -48,6 +48,7 @@ setup(
         'transformers>=4.18.0',
         'mlflow>=1.26.1',
         'gdown>=4.4.0',
+        'fastremap==1.13.4',
 
 
         # additional packages

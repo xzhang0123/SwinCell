@@ -1,19 +1,10 @@
-# Copyright 2020 - 2022 MONAI Consortium
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import math
 import os,glob, random
-
-import libtiff
-libtiff.libtiff_ctypes.suppress_warnings()
+# import libtiff
+# libtiff.libtiff_ctypes.suppress_warnings()
+import warnings
+warnings.filterwarnings('ignore')
 import numpy as np
 import pandas as pd
 import torch
@@ -42,16 +33,12 @@ class flow_reshape(Transform):
         result[0] = np.uint8(result[0]>0)
         result[1:] = (result[1:] - 127)/127
         # print('output flow shape',result.shape, result.dtype)
-        # result.shape,(4, 96, 512, 512)
+        # result.shape,(czxy)
 
         
         return result
 
 class flow_reshaped(MapTransform):
-
-
-
-
     def __init__(self, keys, allow_missing_keys: bool = False):
         super().__init__(keys, allow_missing_keys)
         self.converter = flow_reshape()
@@ -124,6 +111,7 @@ def split_dataset(root_data_dir, split_ratios, shuffle=False, seed=0,dict_keys=T
 
 
 class Sampler(torch.utils.data.Sampler):
+    # Copyright 2020 - 2022 MONAI Consortium
     def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, make_even=True):
         if num_replicas is None:
             if not torch.distributed.is_available():
@@ -195,7 +183,7 @@ def folder_loader(args):
 
     else:  # if specified, use 60% for training, 20% for validation, 20% for testing
         N =len(os.listdir(os.path.join(args.data_dir,'images')))
-        print('length of datasets',N)
+        # print('length of datasets',N)
         # whole dataset
         img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tif*')))
         label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tif*')))
@@ -212,19 +200,25 @@ def folder_loader(args):
 
     train_datalist = [{'image':image,'label':label} for image,label in zip(train_img_full_paths, train_label_full_paths)]    
     val_datalist = [{'image':image,'label':label} for image,label in zip(valid_img_full_paths, valid_label_full_paths)]  
-    print(len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),'a')
+    print('length of train/valid',len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths))
 
     if args.dataset =='colon':
 
-        img_spatial_size= (1300,1030,129)
+        img_shape= (1300,1030,129) #original shape
+        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+        img_reshape = tuple(int(e) for e in img_reshape)
 
     elif args.dataset =='allen':
 
-        img_spatial_size= (900,600,64)
+        img_shape=(900,600,64)
+        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+        img_reshape = tuple(int(e) for e in img_reshape)
 
     elif args.dataset =='nanolive':
 
-        img_spatial_size = (512,512,96)
+        img_shape=(512,512,96)
+        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+        img_reshape = tuple(int(e) for e in img_reshape)
 
     else:
         raise Warning("dataset not defined")
@@ -243,7 +237,7 @@ def folder_loader(args):
             # transforms.AsDiscreted(keys=["label"],threshold=1),
             #----------------------------------------------------------------
             # transform_resize,
-	        transforms.Resized(keys=["image", "label"],spatial_size=img_spatial_size),
+	        transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),
 
             
             # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
@@ -278,7 +272,7 @@ def folder_loader(args):
             # transforms.AsDiscreted(keys=["label"],threshold=1),
             #----------------------------------------------------------------
 
-            transforms.Resized(keys=["image", "label"],spatial_size=img_spatial_size),  #for nanolive
+            transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),  #for nanolive
             # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
             # transforms.Spacingd(
             #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
@@ -305,41 +299,34 @@ def folder_loader(args):
         ]
     )
 
-    if args.test_mode:
-        print('test mode NA')
 
+    if 1: #no cache
+        train_ds = data.Dataset(data=train_datalist, transform=train_transform)
     else:
-
-        # datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
-        #if args.use_normal_dataset:
-        if 1:
-            train_ds = data.Dataset(data=train_datalist, transform=train_transform)
-        else:
-            train_ds = data.CacheDataset(
-                data=train_datalist, transform=train_transform, cache_num=1, cache_rate=0.2, num_workers=args.workers
-            )
-        train_sampler = Sampler(train_ds) if args.distributed else None
-        train_loader = data.DataLoader(
-            train_ds,
-            batch_size=args.batch_size,
-            shuffle=(train_sampler is None),
-            num_workers=args.workers,
-            sampler=train_sampler,
-            pin_memory=True,
+        train_ds = data.CacheDataset(
+            data=train_datalist, transform=train_transform, cache_num=1, cache_rate=0.2, num_workers=args.workers
         )
-        # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
-        val_ds = data.Dataset(data=val_datalist, transform=val_transform)
-        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
-        val_loader = data.DataLoader(
-            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
-        )
-        loader = [train_loader, val_loader]
+    train_sampler = Sampler(train_ds) if args.distributed else None
+    train_loader = data.DataLoader(
+        train_ds,
+        batch_size=args.batch_size,
+        shuffle=(train_sampler is None),
+        num_workers=args.workers,
+        sampler=train_sampler,
+        pin_memory=True,
+    )
+    # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+    val_ds = data.Dataset(data=val_datalist, transform=val_transform)
+    val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+    val_loader = data.DataLoader(
+        val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+    )
+    loader = [train_loader, val_loader]
 
     return loader
 
 
 def get_loader_Allen_tiff(args):
-#modified from here
     
     root_dir = '/data/download_data/quilt-data-access-tutorials-main/all_fov/'
     df = pd.read_csv(root_dir+'meta_info.csv')
@@ -441,143 +428,28 @@ def get_loader_Allen_tiff(args):
         ]
     )
 
-    if args.test_mode:
-        print('test mode NA')
-        # test_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
-        # test_ds = data.Dataset(data=test_files, transform=test_transform)
-        # test_sampler = Sampler(test_ds, shuffle=False) if args.distributed else None
-        # test_loader = data.DataLoader(
-        #     test_ds,
-        #     batch_size=1,
-        #     shuffle=False,
-        #     num_workers=args.workers,
-        #     sampler=test_sampler,
-        #     pin_memory=True,
-        #     persistent_workers=True,
-        # )
-        # loader = test_loader
+    if 0:
+        train_ds = data.Dataset(data=train_datalist, transform=train_transform)
     else:
-
-        # datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
-        #if args.use_normal_dataset:
-        if 0:
-            train_ds = data.Dataset(data=train_datalist, transform=train_transform)
-        else:
-            train_ds = data.CacheDataset(
-                data=train_datalist, transform=train_transform, cache_num=24, cache_rate=1, num_workers=args.workers
-            )
-        train_sampler = Sampler(train_ds) if args.distributed else None
-        train_loader = data.DataLoader(
-            train_ds,
-            batch_size=args.batch_size,
-            shuffle=(train_sampler is None),
-            num_workers=args.workers,
-            sampler=train_sampler,
-            pin_memory=True,
+        train_ds = data.CacheDataset(
+            data=train_datalist, transform=train_transform, cache_num=24, cache_rate=1, num_workers=args.workers
         )
-        # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
-        val_ds = data.Dataset(data=val_datalist, transform=val_transform)
-        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
-        val_loader = data.DataLoader(
-            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
-        )
-        loader = [train_loader, val_loader]
+    train_sampler = Sampler(train_ds) if args.distributed else None
+    train_loader = data.DataLoader(
+        train_ds,
+        batch_size=args.batch_size,
+        shuffle=(train_sampler is None),
+        num_workers=args.workers,
+        sampler=train_sampler,
+        pin_memory=True,
+    )
+    # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+    val_ds = data.Dataset(data=val_datalist, transform=val_transform)
+    val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+    val_loader = data.DataLoader(
+        val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+    )
+    loader = [train_loader, val_loader]
 
     return loader
 
-
-# def datafold_read(datalist, basedir, fold=0, key="training"):
-
-#     with open(datalist) as f:
-#         json_data = json.load(f)
-
-#     json_data = json_data[key]
-
-#     for d in json_data:
-#         for k, v in d.items():
-#             if isinstance(d[k], list):
-#                 d[k] = [os.path.join(basedir, iv) for iv in d[k]]
-#             elif isinstance(d[k], str):
-#                 d[k] = os.path.join(basedir, d[k]) if len(d[k]) > 0 else d[k]
-
-#     tr = []
-#     val = []
-#     for d in json_data:
-#         if "fold" in d and d["fold"] == fold:
-#             val.append(d)
-#         else:
-#             tr.append(d)
-
-#     return tr, val
-
-
-# def get_loader(args):
-#     data_dir = args.data_dir
-#     datalist_json = args.json_list
-#     train_files, validation_files = datafold_read(datalist=datalist_json, basedir=data_dir, fold=args.fold)
-#     train_transform = transforms.Compose(
-#         [
-#             transforms.LoadImaged(keys=["image", "label"]),
-#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
-#             transforms.CropForegroundd(
-#                 keys=["image", "label"], source_key="image", k_divisible=[args.roi_x, args.roi_y, args.roi_z]
-#             ),
-#             transforms.RandSpatialCropd(
-#                 keys=["image", "label"], roi_size=[args.roi_x, args.roi_y, args.roi_z], random_size=False
-#             ),
-#             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
-#             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
-#             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
-#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-#             transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
-#             transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=1.0),
-#             transforms.ToTensord(keys=["image", "label"]),
-#         ]
-#     )
-#     val_transform = transforms.Compose(
-#         [
-#             transforms.LoadImaged(keys=["image", "label"]),
-#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
-#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-#             transforms.ToTensord(keys=["image", "label"]),
-#         ]
-#     )
-
-#     test_transform = transforms.Compose(
-#         [
-#             transforms.LoadImaged(keys=["image", "label"]),
-#             transforms.ConvertToMultiChannelBasedOnBratsClassesd(keys="label"),
-#             transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
-#             transforms.ToTensord(keys=["image", "label"]),
-#         ]
-#     )
-
-#     if args.test_mode:
-
-#         val_ds = data.Dataset(data=validation_files, transform=test_transform)
-#         val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
-#         test_loader = data.DataLoader(
-#             val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
-#         )
-
-#         loader = test_loader
-#     else:
-#         train_ds = data.Dataset(data=train_files, transform=train_transform)
-
-#         train_sampler = Sampler(train_ds) if args.distributed else None
-#         train_loader = data.DataLoader(
-#             train_ds,
-#             batch_size=args.batch_size,
-#             shuffle=(train_sampler is None),
-#             num_workers=args.workers,
-#             sampler=train_sampler,
-#             pin_memory=True,
-#         )
-#         val_ds = data.Dataset(data=validation_files, transform=val_transform)
-#         val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
-#         val_loader = data.DataLoader(
-#             val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
-#         )
-#         loader = [train_loader, val_loader]
-
-#     return loader

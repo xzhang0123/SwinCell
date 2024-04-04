@@ -1,8 +1,9 @@
 # flow generation algorithm from Cellpose, C. Stringer et al. 2021
+#https://github.com/MouseLand/cellpose
 
 import  os,glob
 from scipy.ndimage import maximum_filter1d, find_objects
-from cellpose_utils import masks_to_edges
+from swincell.utils.utils import masks_to_edges
 import torch
 import numpy as np
 import tifffile
@@ -14,8 +15,7 @@ import fastremap
 import logging
 dynamics_logger = logging.getLogger(__name__)
 
-import swincell.utils.utils as utils
-# from cellpose_utils import utils
+# import swincell.utils.utils as utils
 #from . import utils, metrics, transforms
 
 import torch
@@ -49,9 +49,9 @@ def batch_masks_to_flows(input_path,output_path,delete_edges=True,binary2sequent
         output_file_name = file.split('/')[-1].split('.')[0]+'_mask_with_flow.tiff'
 
         flows = masks_to_flows(mask)
-        print(flows.max(),flows.min())
+        # print(flows.max(),flows.min())
         flows = normalize_to_uint8(flows)
-        print(flows.max(),flows.min())
+        # print(flows.max(),flows.min())
         if delete_edges:
             edges = masks_to_edges(mask.astype(np.uint8))
             mask = (mask>0).astype(np.uint8) - edges
@@ -204,6 +204,63 @@ def masks_to_flows_gpu(masks, device=None):
     return mu0, mu_c
 
 
+def diameters(masks):
+    """
+    Calculate the diameters of the objects in the given masks.
+
+    Parameters:
+    masks (ndarray): masks (0=no cells, 1=first cell, 2=second cell,...)
+    """
+    uniq, counts = fastremap.unique(masks.astype("int32"), return_counts=True)
+    counts = counts[1:]
+    md = np.median(counts**0.5)
+    if np.isnan(md):
+        md = 0
+    md /= (np.pi**0.5) / 2
+    return md, counts**0.5
+
+
+def fill_holes_and_remove_small_masks(masks, min_size=15):
+    """ Fills holes in masks (2D/3D) and discards masks smaller than min_size.
+
+    This function fills holes in each mask using scipy.ndimage.morphology.binary_fill_holes.
+    It also removes masks that are smaller than the specified min_size.
+
+    Parameters:
+    masks (ndarray): Int, 2D or 3D array of labelled masks.
+        0 represents no mask, while positive integers represent mask labels.
+        The size can be [Ly x Lx] or [Lz x Ly x Lx].
+    min_size (int, optional): Minimum number of pixels per mask.
+        Masks smaller than min_size will be removed.
+        Set to -1 to turn off this functionality. Default is 15.
+
+    Returns:
+    ndarray: Int, 2D or 3D array of masks with holes filled and small masks removed.
+        0 represents no mask, while positive integers represent mask labels.
+        The size is [Ly x Lx] or [Lz x Ly x Lx].
+    """
+
+    if masks.ndim > 3 or masks.ndim < 2:
+        raise ValueError("masks_to_outlines takes 2D or 3D array, not %dD array" %
+                         masks.ndim)
+
+    slices = find_objects(masks)
+    j = 0
+    for i, slc in enumerate(slices):
+        if slc is not None:
+            msk = masks[slc] == (i + 1)
+            npix = msk.sum()
+            if min_size > 0 and npix < min_size:
+                masks[slc][msk] = 0
+            elif npix > 0:
+                if msk.ndim == 3:
+                    for k in range(msk.shape[0]):
+                        msk[k] = binary_fill_holes(msk[k])
+                else:
+                    msk = binary_fill_holes(msk)
+                masks[slc][msk] = (j + 1)
+                j += 1
+    return masks
 
 def masks_to_flows_cpu(masks, device=None):
     """ convert masks to flows using diffusion from center pixel
@@ -231,7 +288,7 @@ def masks_to_flows_cpu(masks, device=None):
     
     nmask = masks.max()
     slices = find_objects(masks)
-    dia = utils.diameters(masks)[0]
+    dia = diameters(masks)[0]
     s2 = (.15 * dia)**2
     for i,si in enumerate(slices):
         if si is not None:
@@ -805,7 +862,7 @@ def compute_masks(dP, cellprob, p=None, niter=200,
     # moving the cleanup to the end helps avoid some bugs arising from scaling...
     # maybe better would be to rescale the min_size and hole_size parameters to do the
     # cleanup at the prediction scale, or switch depending on which one is bigger... 
-    mask = utils.fill_holes_and_remove_small_masks(mask, min_size=min_size)
+    mask = fill_holes_and_remove_small_masks(mask, min_size=min_size)
 
     if mask.dtype==np.uint32:
         dynamics_logger.warning('more than 65535 masks in image, masks returned as np.uint32')
