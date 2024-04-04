@@ -1,4 +1,5 @@
 tests
+test*.sh
 results
 future_works
 *.log

@@ -40,7 +40,7 @@ conda install -c anaconda ipykernel
 python -m ipykernel install --user --name=swincell
 ```
 2. Run the following notebook under the swincell environment:
-[workflow_training.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/workflow.ipynb)
+[workflows.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/training_and_prediction_pipeline.ipynb)
 
 A google colab notebook will be added soon.
 ### Model training via Terminal
