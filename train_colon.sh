@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 #settings
 root_folder=''
 data_folder="./colon_30"

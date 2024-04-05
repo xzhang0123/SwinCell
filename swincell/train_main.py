@@ -13,6 +13,7 @@ from swincell.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 from swincell.trainer import run_training
 # from utils.data_utils import get_loader_Allen_tiff, folder_loader,folder_loader_cellpose
 from swincell.utils.data_utils import folder_loader
+from swincell.utils.utils import load_model
 # from uni_data_utils import get_loader_Allen_tiff
 
 from monai.inferers import sliding_window_inference

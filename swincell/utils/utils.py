@@ -2,6 +2,7 @@
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+from monai.networks.nets import SwinUNETR,UNet
 import tifffile
 
 def load_default_config():
@@ -35,6 +36,29 @@ def load_default_config():
 )
     return args
 
+def load_model(args):
+    if args.model == 'swin':
+        model = SwinUNETR(
+            img_size=(args.roi_x, args.roi_y, args.roi_z),
+            in_channels=1,
+            out_channels=4,
+            # feature_size=args.feature_size,
+            feature_size=args.feature_size,
+            use_checkpoint=args.checkpoint,
+        )
+    elif args.model == 'unet': # for ablation study
+        model = UNet(
+            # img_size=(args.roi_x, args.roi_y, args.roi_z),
+            spatial_dims=args.spatial_dims,
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2, 2),
+            num_res_units=2
+        )
+    else:
+        raise NotImplementedError 
+    return model
 
 def get_random_cmap(num, seed=1, background=1):
     """
