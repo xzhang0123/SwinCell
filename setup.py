@@ -5,7 +5,6 @@ import os
 
 from setuptools import setup, find_packages
 
-
 setup(
     name='swincell',
     version='0.6',
