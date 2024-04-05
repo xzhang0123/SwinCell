@@ -1,7 +1,7 @@
 tests
 test*.sh
 results
-future_works
+future_works/
 *.log
 __pycache__/
 pretrained_models
@@ -13,3 +13,5 @@ runs
 Nanolive_2d*
 swincell.egg-info
 junk
+# swincell/notebooks_plot_results/*ipynb
+Nanolive_dataset

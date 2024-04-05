@@ -40,7 +40,7 @@ conda install -c anaconda ipykernel
 python -m ipykernel install --user --name=swincell
 ```
 2. Run the following notebook under the swincell environment:
-[workflows.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/training_and_prediction_pipeline.ipynb)
+[demo_workflows.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/training_and_prediction_pipeline.ipynb)
 
 A google colab notebook will be added soon.
 ### Model training via Terminal
@@ -48,7 +48,9 @@ A google colab notebook will be added soon.
 # activate environment
 conda acivate swincell
 # configure hyper-paramters, run training
-sh python ./swincell/train_main.py --data_dir=<data_dir> --val_every=<valid_every_N_ephochs> --model 'swin'  --logdir <log_dir> --max_epochs 100 --roi_x=64 --roi_y=64 --roi_z=32  --feature_size=48 \
+sh python ./swincell/train_main.py --data_dir=<data_dir> --val_every=<valid_every_N_ephochs> 
+--model 'swin'  --logdir <log_dir> --max_epoches <max_epoches> --roi_x=<roi_x> --roi_y=<roi_y> --roi_z=<roi_z>
+
 ```
 ## Model inference
 [model_inference](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/)

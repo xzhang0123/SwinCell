@@ -222,7 +222,7 @@ def folder_loader(args):
 
     else:
         raise Warning("dataset not defined")
-        transform_resize = None
+        img_reshape = None
 
     train_transform = transforms.Compose(
         [
@@ -236,7 +236,6 @@ def folder_loader(args):
             # transforms.AddChanneld(keys=["image","label"]),
             # transforms.AsDiscreted(keys=["label"],threshold=1),
             #----------------------------------------------------------------
-            # transform_resize,
 	        transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),
 
             

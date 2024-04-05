@@ -10,7 +10,6 @@ import torch.utils.data.distributed
 from tensorboardX import SummaryWriter
 from torch.cuda.amp import autocast
 from swincell.utils.utils import AverageMeter, distributed_all_gather
-
 from monai.data import decollate_batch
 
 
