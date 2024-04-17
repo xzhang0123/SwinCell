@@ -30,8 +30,10 @@ pip install swincell
     │   ├── images         # raw images in tiff format
     │   └── labels         # ground truth semantic label. 0=background, 1=cell
     └── ...
-## Demo data
+## Nanolive Demo data
 [Nanolive Demo Dataset](https://brookhavenlab-my.sharepoint.com/:f:/g/personal/xzhang4_bnl_gov/EsDdL48uEmRKskKE5OCOX4cBaOXSdmS-YGWDxlS7_lgExA?e=WyDpCh)
+## Link to the Colon dataset
+[Colon Dataset](http://datasets.gryf.fi.muni.cz/iciar2011/ColonTissue_LowNoise_3D_TIFF.zip)
 ## Model training
 ### Model training with jupyter-notebook
 1. add the SwinCell environment as a new kernel to your Jupyter Notebook: 
