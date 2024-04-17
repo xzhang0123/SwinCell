@@ -1,18 +1,22 @@
-
+import os
+import glob
+import random
 import math
-import os,glob, random
-# import libtiff
-# libtiff.libtiff_ctypes.suppress_warnings()
-import warnings
-warnings.filterwarnings('ignore')
 import numpy as np
 import pandas as pd
 import torch
 from natsort import natsorted
-
 from monai import data, transforms
-
 from monai.transforms import  Transform, MapTransform
+from swincell.cellpose_dynamics import masks_to_flows
+from skimage import measure
+# import libtiff
+# libtiff.libtiff_ctypes.suppress_warnings()
+import warnings
+warnings.filterwarnings('ignore')
+
+
+
 
 
 # from monai.utils.enums import TransformBackends
@@ -28,10 +32,9 @@ class flow_reshape(Transform):
 
         # result =np.array(np.split(img,4,axis=2),dtype=np.uint8)
         result =np.array(np.split(img,4,axis=2))
-        #test
-        # result = 
-        result[0] = np.uint8(result[0]>0)
-        result[1:] = (result[1:] - 127)/127
+
+        result[0] = np.uint8(result[0]>0) 
+        result[1:] = (result[1:] - 127)/127 # normalize flows to 0
         # print('output flow shape',result.shape, result.dtype)
         # result.shape,(czxy)
 
@@ -42,6 +45,35 @@ class flow_reshaped(MapTransform):
     def __init__(self, keys, allow_missing_keys: bool = False):
         super().__init__(keys, allow_missing_keys)
         self.converter = flow_reshape()
+
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = self.converter(d[key])
+        return d
+    
+class flow_generation(Transform):
+    
+    # backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __call__(self, labels):
+        # if img has channel dim, squeeze it
+        if labels.ndim == 4 and labels.shape[0] == 1:
+            labels = labels.squeeze(0)
+        labels = measure.label(labels)
+        if np.max(labels) == 0:
+            print('got empty masks, returning zeros')
+
+            return np.zeros((4, *labels.shape),dtype=np.float32)
+        label_with_flows = masks_to_flows(labels)
+        results = np.concatenate((labels[None, :], label_with_flows),axis=0)
+        results[0] = np.uint8(results[0]>0) 
+        return np.float32(results)
+    
+class flow_generationd(MapTransform):
+    def __init__(self, keys, allow_missing_keys: bool = False):
+        super().__init__(keys, allow_missing_keys)
+        self.converter = flow_generation()
 
     def __call__(self, data):
         d = dict(data)
@@ -96,7 +128,60 @@ def split_dataset(root_data_dir, split_ratios, shuffle=False, seed=0,dict_keys=T
         elif len(split_ratios) == 3:
             train_datalist= [{'image':image,'label':label} for image,label in zip(train_images,train_labels)]
             validation_datalist = [{'image':image,'label':label} for image,label in zip(validation_images,validation_labels)]
-            test_datalist = [{'image':image,'label':label} for image,label in zip(test_images,test_labels)]
+            test_datalist = [{'image':image} for image in test_images]
+
+            return train_datalist, validation_datalist, test_datalist
+    else:
+
+        if len(split_ratios) == 2:
+            return train_images, validation_images
+        elif len(split_ratios) == 3:
+            return train_images, validation_images, test_images
+    
+def split_dataset_folder(all_images, all_labels, split_ratios, shuffle=False, seed=0,dict_keys=True):
+    
+    assert sum(split_ratios) == 1, "Split ratios must sum to 1"
+    assert len(all_images) == len(all_labels), "Number of images and labels must match"
+
+    if shuffle:       #shuffle the files to ensure random distribution
+        random.seed(seed)
+        random.shuffle(all_images)
+        random.shuffle(all_labels)
+
+    
+    # Determine the split index
+    if len(split_ratios) == 2:
+        split_index = int(len(all_images) * split_ratios[0])
+        train_images = all_images[:split_index]
+        validation_images = all_images[split_index:]
+        train_labels = all_labels[:split_index]
+        validation_labels = all_labels[split_index:]
+    elif len(split_ratios) == 3:
+        train_end_index= int(len(all_images) * split_ratios[0])
+        val_end_index = int(len(all_images) * split_ratios[1])
+
+        train_images = all_images[:train_end_index]
+        validation_images = all_images[train_end_index:val_end_index]
+        test_images = all_images[val_end_index:]
+
+        train_labels = all_labels[:train_end_index]
+        validation_labels = all_labels[train_end_index:val_end_index]
+        test_labels = all_labels[val_end_index:]
+
+    else:
+        raise ValueError("Invalid split ratios")
+    
+    if dict_keys:
+
+        if len(split_ratios) == 2:
+            train_datalist = [{'image':image,'label':label} for image,label in zip(train_images,train_labels)] 
+            validation_datalist = [{'image':image,'label':label} for image,label in zip(validation_images,validation_labels)]
+
+            return train_datalist, validation_datalist
+        elif len(split_ratios) == 3:
+            train_datalist= [{'image':image,'label':label} for image,label in zip(train_images,train_labels)]
+            validation_datalist = [{'image':image,'label':label} for image,label in zip(validation_images,validation_labels)]
+            test_datalist = [{'image':image} for image in test_images]
 
             return train_datalist, validation_datalist, test_datalist
     else:
@@ -107,11 +192,9 @@ def split_dataset(root_data_dir, split_ratios, shuffle=False, seed=0,dict_keys=T
             return train_images, validation_images, test_images
     
 
-    
-
 
 class Sampler(torch.utils.data.Sampler):
-    # Copyright 2020 - 2022 MONAI Consortium
+    # sampler from monai package, Copyright 2020 - 2022 MONAI Consortium
     def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, make_even=True):
         if num_replicas is None:
             if not torch.distributed.is_available():
@@ -292,9 +375,12 @@ def folder_loader(args):
 
     test_transform = transforms.Compose(
         [
-            transforms.LoadImaged(keys=["image", "label"]),
-            transforms.AsDiscreted(keys=["label"],threshold=1),
-            transforms.ToTensord(keys=["image", "label"]),
+            transforms.LoadImaged(keys=["image"]),
+            transforms.EnsureChannelFirstd(keys=["image"]),
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=0, b_max=1, clip=True
+            ),
+            transforms.ToTensord(keys=["image"]),
         ]
     )
 
@@ -324,6 +410,140 @@ def folder_loader(args):
 
     return loader
 
+
+def folder_loader_nothefly(args):
+    
+    print('folder loader for tiff images')
+    import os
+    import glob
+
+    image_files = natsorted(glob.glob(args.data_dir +'images/*tif*'))
+    mask_files = natsorted(glob.glob(args.data_dir +'labels/*tif*'))#
+    train_datalist, val_datalist = split_dataset_folder(image_files,mask_files, split_ratios=[0.8,0.2])
+    if args.dataset =='colon':
+
+        img_shape= (1300,1030,129) #original shape
+        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+        img_reshape = tuple(int(e) for e in img_reshape)
+
+    elif args.dataset =='allen':
+
+        img_shape=(900,600,64)
+        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+        img_reshape = tuple(int(e) for e in img_reshape)
+
+    elif args.dataset =='nanolive':
+
+        img_shape=(512,512,96)
+        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+        img_reshape = tuple(int(e) for e in img_reshape)
+
+    else:
+        raise Warning("dataset not defined")
+        img_reshape = None
+
+    train_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
+            flow_reshaped(keys=["label"]),
+            #----------------------------for multichannel image-----------------------
+            # transforms.AddChanneld(keys=["image"]),
+            # transforms.ConvertToMultiChannelNanolived(keys="label"),
+            #----------------------------for single channel image-----------------------
+            # transforms.AddChanneld(keys=["image","label"]),
+            # transforms.AsDiscreted(keys=["label"],threshold=1),
+            #----------------------------------------------------------------
+	        transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),
+
+            
+            # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
+            # transforms.Spacingd(
+            #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+            # ),
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            ),
+            transforms.RandSpatialCropSamplesd(
+                keys=["image","label"],
+                roi_size=[args.roi_x, args.roi_y, args.roi_z],
+                num_samples=2,
+                random_center=True,
+                random_size=False,
+            ),
+            # transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+            # transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+    val_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image", "label"]),
+            transforms.EnsureChannelFirstd(keys=["image", "label"]),
+            flow_reshaped(keys=["label"]),
+            #----------------------------for multichannel-----------------------
+            # transforms.AddChanneld(keys=["image"]),
+            # transforms.ConvertToMultiChannelNanolived(keys="label"),
+            #----------------------------for single channel-----------------------
+            # transforms.AddChanneld(keys=["image","label"]),
+            # transforms.AsDiscreted(keys=["label"],threshold=1),
+            #----------------------------------------------------------------
+
+            transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),  #for nanolive
+            # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
+            # transforms.Spacingd(
+            #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+            # ),   # for  anisotropic datasets
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            ),
+            transforms.RandSpatialCropSamplesd(
+                keys=["image","label"],
+                roi_size=[args.roi_x, args.roi_y, args.roi_z],
+                num_samples=2,
+                random_center=True,
+                random_size=False,
+            ),
+            transforms.ToTensord(keys=["image", "label"]),
+        ]
+    )
+
+    test_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(keys=["image"]),
+            transforms.EnsureChannelFirstd(keys=["image"]),
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=0, b_max=1, clip=True
+            ),
+            transforms.ToTensord(keys=["image"]),
+        ]
+    )
+
+
+    if 1: #no cache
+        train_ds = data.Dataset(data=train_datalist, transform=train_transform)
+    else:
+        train_ds = data.CacheDataset(
+            data=train_datalist, transform=train_transform, cache_num=1, cache_rate=0.2, num_workers=args.workers
+        )
+    train_sampler = Sampler(train_ds) if args.distributed else None
+    train_loader = data.DataLoader(
+        train_ds,
+        batch_size=args.batch_size,
+        shuffle=(train_sampler is None),
+        num_workers=args.workers,
+        sampler=train_sampler,
+        pin_memory=True,
+    )
+    # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+    val_ds = data.Dataset(data=val_datalist, transform=val_transform)
+    val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+    val_loader = data.DataLoader(
+        val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+    )
+    loader = [train_loader, val_loader]
+
+    return loader
 
 def get_loader_Allen_tiff(args):
     

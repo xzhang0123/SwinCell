@@ -2,7 +2,8 @@
 #https://github.com/MouseLand/cellpose
 
 import  os,glob
-from scipy.ndimage import maximum_filter1d, find_objects
+from scipy.ndimage import maximum_filter1d, find_objects,binary_fill_holes
+
 from swincell.utils.utils import masks_to_edges
 import torch
 import numpy as np
@@ -15,12 +16,8 @@ import fastremap
 import logging
 dynamics_logger = logging.getLogger(__name__)
 
-# import swincell.utils.utils as utils
-#from . import utils, metrics, transforms
 
-import torch
-from torch import optim, nn
-# from . import resnet_torch
+
 TORCH_ENABLED = True 
 torch_GPU = torch.device('cuda')
 torch_CPU = torch.device('cpu')
@@ -798,6 +795,57 @@ def get_masks(p, iscell=None, rpad=20):
     M0 = np.reshape(M0, shape0)
     return M0
 
+def resize_image(img0, Ly=None, Lx=None, rsz=None, interpolation=cv2.INTER_LINEAR,
+                 no_channels=False):
+    """Resize image for computing flows / unresize for computing dynamics.
+
+    Args:
+        img0 (ndarray): Image of size [Y x X x nchan] or [Lz x Y x X x nchan] or [Lz x Y x X].
+        Ly (int, optional): Desired height of the resized image. Defaults to None.
+        Lx (int, optional): Desired width of the resized image. Defaults to None.
+        rsz (float, optional): Resize coefficient(s) for the image. If Ly is None, rsz is used. Defaults to None.
+        interpolation (int, optional): OpenCV interpolation method. Defaults to cv2.INTER_LINEAR.
+        no_channels (bool, optional): Flag indicating whether to treat the third dimension as a channel. 
+            Defaults to False.
+
+    Returns:
+        ndarray: Resized image of size [Ly x Lx x nchan] or [Lz x Ly x Lx x nchan].
+
+    Raises:
+        ValueError: If Ly is None and rsz is None.
+
+    """
+    if Ly is None and rsz is None:
+        error_message = "must give size to resize to or factor to use for resizing"
+        raise ValueError(error_message)
+
+    if Ly is None:
+        # determine Ly and Lx using rsz
+        if not isinstance(rsz, list) and not isinstance(rsz, np.ndarray):
+            rsz = [rsz, rsz]
+        if no_channels:
+            Ly = int(img0.shape[-2] * rsz[-2])
+            Lx = int(img0.shape[-1] * rsz[-1])
+        else:
+            Ly = int(img0.shape[-3] * rsz[-2])
+            Lx = int(img0.shape[-2] * rsz[-1])
+
+    # no_channels useful for z-stacks, so the third dimension is not treated as a channel
+    # but if this is called for grayscale images, they first become [Ly,Lx,2] so ndim=3 but
+    if (img0.ndim > 2 and no_channels) or (img0.ndim == 4 and not no_channels):
+        if Ly == 0 or Lx == 0:
+            raise ValueError(
+                "anisotropy too high / low -- not enough pixels to resize to ratio")
+        if no_channels:
+            imgs = np.zeros((img0.shape[0], Ly, Lx), np.float32)
+        else:
+            imgs = np.zeros((img0.shape[0], Ly, Lx, img0.shape[-1]), np.float32)
+        for i, img in enumerate(img0):
+            imgs[i] = cv2.resize(img, (Lx, Ly), interpolation=interpolation)
+    else:
+        imgs = cv2.resize(img0, (Lx, Ly), interpolation=interpolation)
+    return imgs
+
 def compute_masks(dP, cellprob, p=None, niter=200, 
                    cellprob_threshold=0.0,
                    flow_threshold=0.4, interp=True, do_3D=False, 
@@ -844,7 +892,7 @@ def compute_masks(dP, cellprob, p=None, niter=200,
             else:
                 recast = False
                 mask = mask.astype(np.uint16)
-            mask = transforms.resize_image(mask, resize[0], resize[1], interpolation=cv2.INTER_NEAREST)
+            mask = resize_image(mask, resize[0], resize[1], interpolation=cv2.INTER_NEAREST)
             if recast:
                 mask = mask.astype(np.uint32)
             Ly,Lx = mask.shape

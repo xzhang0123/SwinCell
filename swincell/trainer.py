@@ -154,7 +154,9 @@ def save_checkpoint(model, epoch, args, filename="model.pt", best_acc=0, optimiz
         save_dict["optimizer"] = optimizer.state_dict()
     if scheduler is not None:
         save_dict["scheduler"] = scheduler.state_dict()
-    filename = os.path.join(args.logdir, filename)
+    # if args.logdir:
+    if hasattr(args, "logdir"):
+        filename = os.path.join(args.logdir, filename)
     torch.save(save_dict, filename)
     print("Saving checkpoint", filename)
 
