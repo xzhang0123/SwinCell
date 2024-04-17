@@ -39,8 +39,8 @@ pip install swincell
 conda install -c anaconda ipykernel
 python -m ipykernel install --user --name=swincell
 ```
-2. Run the following notebook under the swincell environment:
-[demo_workflows.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/training_and_prediction_pipeline.ipynb)
+2. Run the following demo notebook under the swincell environment:
+[training_prediction_pipeline.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/training_prediction_pipeline.ipynb)
 
 A google colab notebook will be added soon.
 ### Model training via Terminal
@@ -53,7 +53,7 @@ sh python ./swincell/train_main.py --data_dir=<data_dir> --val_every=<valid_ever
 
 ```
 ## Model inference
-[model_inference](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/)
+[training_prediction_pipeline.ipynb](https://github.com/xzhang0123/SwinCell/blob/main/swincell/notebooks/training_prediction_pipeline.ipynb)
 
 ## Trouble shooting/common mistakes:
 * feature size of swin-transformer must be divisible by 32, error raises otherwise
