@@ -34,6 +34,9 @@ pip install swincell
 [Nanolive Demo Dataset](https://brookhavenlab-my.sharepoint.com/:f:/g/personal/xzhang4_bnl_gov/EsDdL48uEmRKskKE5OCOX4cBaOXSdmS-YGWDxlS7_lgExA?e=WyDpCh)
 ## Link to the Colon dataset
 [Colon Dataset](http://datasets.gryf.fi.muni.cz/iciar2011/ColonTissue_LowNoise_3D_TIFF.zip)
+
+Note: The original colon dataset contains a private TIFF tag 65000 (0xFDE8) that is not recognized by standard TIFF reading libraries. To prevent continuous Warnings during model training, we provide a cleaned demo version of the dataset. You can download the updated dataset from the link below
+[Cleaned Colon Dataset](https://brookhavenlab-my.sharepoint.com/:u:/g/personal/xzhang4_bnl_gov/EaNWJnxUgYVFgzpE_du_VrEBUgJ-jyssLkklff3Ii8jZ8g?e=RONfch)
 ## Model training
 ### Model training with jupyter-notebook
 1. add the SwinCell environment as a new kernel to your Jupyter Notebook: 

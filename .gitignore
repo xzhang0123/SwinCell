@@ -16,3 +16,4 @@ junk
 # swincell/notebooks_plot_results/*ipynb
 Nanolive_dataset
 test*.sh
+*.tar
