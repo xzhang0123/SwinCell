@@ -229,6 +229,7 @@ def run_training(
                 if writer is not None:
                     writer.add_scalar("Mean_Val_Dice", np.mean(val_acc), epoch)
                     if args.save_temp_img:
+                        # for debug purpose, save intermediate results
                         writer.add_image("Validation/x1_raw", val_img_list[0], epoch, dataformats="HW")
                         writer.add_image("Validation/x1_gt", val_img_list[1], epoch, dataformats="HW")
                         writer.add_image("Validation/x1_prediction", val_img_list[2], epoch, dataformats="HW")

@@ -22,9 +22,21 @@ warnings.filterwarnings('ignore')
 # from monai.utils.enums import TransformBackends
 
 class flow_reshape(Transform):
+    """
+    Transform to reshape the generated flow images for cell segmentation in PyTorch.
 
-    # backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+    This transform reshapes and processes 3D cellular segmentation images by splitting the input image
+    along the third axis into four parts, where the first part is binarized and the remaining parts 
+    are normalized. 
 
+    Args:
+        img (ndarray): Input image with dimensions (C, Z, X, Y). If the image has a single channel dimension,
+                       it will be squeezed.
+
+    Returns:
+        ndarray: Transformed image with shape (4, Z, X, Y), where the first slice is a binary mask and 
+                 the remaining slices are normalized flows.
+    """
     def __call__(self, img):
         # if img has channel dim, squeeze it
         if img.ndim == 4 and img.shape[0] == 1:
@@ -42,6 +54,22 @@ class flow_reshape(Transform):
         return result
 
 class flow_reshaped(MapTransform):
+
+    """
+    Transform to reshape the generated flow images for cell segmentation in PyTorch.
+
+    This transform reshapes and processes 3D cellular segmentation images by splitting the input image
+    along the third axis into four parts, where the first part is binarized and the remaining parts 
+    are normalized. 
+
+    Args:
+        img (ndarray): Input image with dimensions (C, Z, X, Y). If the image has a single channel dimension,
+                       it will be squeezed.
+
+    Returns:
+        ndarray: Transformed image with shape (4, Z, X, Y), where the first slice is a binary mask and 
+                 the remaining slices are normalized flows.
+    """
     def __init__(self, keys, allow_missing_keys: bool = False):
         super().__init__(keys, allow_missing_keys)
         self.converter = flow_reshape()
@@ -54,8 +82,18 @@ class flow_reshaped(MapTransform):
     
 class flow_generation(Transform):
     
-    # backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+    """
+    Generate flow from image label for model training
 
+
+    Args:
+        img (ndarray): Input image with dimensions (C, Z, X, Y). If the image has a single channel dimension,
+                       it will be squeezed.
+
+    Returns:
+        ndarray: Transformed image with shape (4, Z, X, Y), where the first slice is a binary mask and 
+                 the remaining slices are normalized flows.
+    """
     def __call__(self, labels):
         # if img has channel dim, squeeze it
         if labels.ndim == 4 and labels.shape[0] == 1:
@@ -71,6 +109,17 @@ class flow_generation(Transform):
         return np.float32(results)
     
 class flow_generationd(MapTransform):
+
+    """
+    Generate flow from image label for model training
+    Args:
+        img (ndarray): Input image with dimensions (C, Z, X, Y). If the image has a single channel dimension,
+                       it will be squeezed.
+
+    Returns:
+        ndarray: Transformed image with shape (4, Z, X, Y), where the first slice is a binary mask and 
+                 the remaining slices are normalized flows.
+    """
     def __init__(self, keys, allow_missing_keys: bool = False):
         super().__init__(keys, allow_missing_keys)
         self.converter = flow_generation()
@@ -621,14 +670,7 @@ def get_loader_Allen_tiff(args):
             transforms.ScaleIntensityRanged(
                 keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
             ),
-            # transforms.RandSpatialCropSamplesd(
-            #         keys=["image","label"],
-            #         roi_size=[args.roi_x, args.roi_y, args.roi_z],
-            #         num_samples=2,
-            #         random_center=True,
-            #         random_size=False,
-            #     ),
-            # transforms.CropForegroundd(keys=["image", "label"], source_key="image"),
+       
             transforms.ToTensord(keys=["image", "label"]),
         ]
     )
@@ -638,11 +680,6 @@ def get_loader_Allen_tiff(args):
             transforms.LoadImaged(keys=["image", "label"]),
             transforms.AsDiscreted(keys=["label"],threshold=1),
             transforms.AddChanneld(keys=["image", "label"]),
-            # transforms.Orientationd(keys=["image"], axcodes="RAS"),
-            # transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
-            # transforms.ScaleIntensityRanged(
-            #     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
-            # ),
             transforms.ToTensord(keys=["image", "label"]),
         ]
     )

@@ -36,6 +36,7 @@ pip install swincell
 [Colon Dataset](http://datasets.gryf.fi.muni.cz/iciar2011/ColonTissue_LowNoise_3D_TIFF.zip)
 
 Note: The original colon dataset contains a private TIFF tag 65000 (0xFDE8) that is not recognized by standard TIFF reading libraries. To prevent continuous Warnings during model training, we provide a cleaned demo version of the dataset. You can download the updated dataset from the link below
+
 [Cleaned Colon Dataset](https://brookhavenlab-my.sharepoint.com/:u:/g/personal/xzhang4_bnl_gov/EaNWJnxUgYVFgzpE_du_VrEBUgJ-jyssLkklff3Ii8jZ8g?e=RONfch)
 ## Model training
 ### Model training with jupyter-notebook

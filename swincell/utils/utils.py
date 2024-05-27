@@ -6,6 +6,28 @@ from monai.networks.nets import SwinUNETR,UNet
 import tifffile
 
 def load_default_config():
+    """
+    Load the default configuration for the model training process.
+    Returns:
+        SimpleNamespace: An object with the following attributes set to default values:
+            - data_dir (str): Directory path for the data.
+            - dataset (str): Name of the dataset, used to define dataset specific parameters.
+            - checkpoint (str): Path to the model checkpoint.
+            - rank (int): Rank of the process for distributed training.
+            - batch_size (int): Number of samples per batch, default is 1.
+            - max_epochs (int): Maximum number of training epochs, default is 1000.
+            - optim_lr (float): Learning rate for the optimizer, default is 1e-5.
+            - model (str): Model type to use, default is 'swin'.
+            - distributed (bool): Flag to enable distributed training, default is False.
+            - optimizer (str): Type of optimizer to use, default is 'adam'.
+            - save_temp_img (bool): Flag to enable saving temporary prediction images, used for debugging purposes.
+            - downsample_factor (int): Factor to downsample the input images, default is 1.
+            - use_flows (bool): Flag to determine if flows should be used, default is True.
+            - roi_x (int), roi_y (int), roi_z (int): Dimensions of the region of interest,
+              defaults are 128, 128, and 32 respectively.
+            - fold (str): Specific fold of data to use, default is None.
+            - workers (int): Number of worker threads for data loading, default is 8.
+    """
     from types import SimpleNamespace
     args = SimpleNamespace(
     data_dir =None,
@@ -37,6 +59,24 @@ def load_default_config():
     return args
 
 def load_model(args):
+
+    """
+        Load and initialize a segmentation model based on the specified arguments.
+
+        Returns:
+            object: An instance of the specified segmentation model, configured and ready for training
+            or inference.
+        Raises:
+            NotImplementedError: If the model specified in 'args.model' is not supported.
+
+        Examples:
+            >>> from types import SimpleNamespace
+            >>> args = SimpleNamespace(model='swin', roi_x=128, roi_y=128, roi_z=32,
+                                    feature_size=48, checkpoint=None)
+            >>> model = load_model(args)
+            >>> print(model)
+    """
+ 
     if args.model == 'swin':
         model = SwinUNETR(
             img_size=(args.roi_x, args.roi_y, args.roi_z),
@@ -59,6 +99,22 @@ def load_model(args):
     else:
         raise NotImplementedError 
     return model
+
+
+def auto_gamma_correction(image):
+    """
+    Apply automatic gamma correction to the input image.
+    
+    Parameters:
+    image (numpy.ndarray): Input image (gray scale).
+    
+    Returns:
+    numpy.ndarray: Gamma corrected image.
+    """
+
+    meanv = np.mean(image)
+    gamma = np.log(0.5) / np.log(meanv / 255.0 + 1e-8)
+    return np.power(image / 255.0, gamma) * 255
 
 def get_random_cmap(num, seed=1, background=1):
     """
@@ -85,6 +141,11 @@ def get_random_cmap(num, seed=1, background=1):
     cmap.colors[0, :3] = background
     return cmap
 def plot_with_se(ax,matrix,iou_thresholds,label=None,style='-',color=None):
+    """
+    Plot the mean and standard error of the evaluation metrics for a given IoU threshold, used to plot results in papers
+    Returns:
+    matplotlib.axes.Axes: The axis object with the plot.
+    """
     mean = np.mean(matrix, axis=0)
     std = np.std(matrix, axis=0)
     se = std / np.sqrt(matrix.shape[0])
@@ -94,6 +155,22 @@ def plot_with_se(ax,matrix,iou_thresholds,label=None,style='-',color=None):
     return ax
 
 def plot_box_with_violin(ax,data,label=None,style='-',facecolorlist=None):
+    """
+    Plot both boxplot and violin plot together on a given axis for visual comparison of data distribution.
+
+    Parameters:
+        ax (matplotlib.axes.Axes): The matplotlib axis object on which the plots will be drawn.
+        data (array-like): The input data for the plots. Should be a list or array where each element
+                           corresponds to a different dataset.
+        label (str, optional): The label for the plots, used for the legend. Default is None.
+        style (str, optional): The line style for the boxplot, not typically used as boxplots do not
+                               have line styles. Default is '-'.
+        facecolorlist (list, optional): A list of colors for the violin plots. If None, a default color
+                                        will be used. Default is None.
+
+    Returns:
+        matplotlib.axes.Axes: The axis object with the plot.
+    """
     N=len(facecolorlist)
     box_plot = ax.boxplot(data)
     violin_plot = ax.violinplot(data, showextrema=False)
@@ -107,6 +184,23 @@ def plot_box_with_violin(ax,data,label=None,style='-',facecolorlist=None):
 
 
 def calculate_cell_volumes(mask):
+    """
+    Calculate the volumes of individual cells labeled in a segmentation mask. 0 is the background
+
+    Parameters:
+        mask (numpy.ndarray): A segmentation mask array where each unique non-zero integer
+                              represents a unique cell.
+    Returns:
+        list: A list of volumes corresponding to each unique cell label in the mask, sorted by
+              the label values.
+
+    Examples:
+        >>> mask = np.array([[0, 1, 1], [0, 2, 2], [0, 2, 2]])
+        >>> volumes = calculate_cell_volumes(mask)
+        >>> print(volumes)
+        [2, 3]
+    """
+
     # Get unique labels excluding the background label (0)
     labels = np.unique(mask)
     labels = labels[labels != 0]
@@ -120,6 +214,25 @@ def calculate_cell_volumes(mask):
     return volumes
 
 def calculate_cell_diameters(mask):
+
+    """
+    Calculate the diameters of individual 3D cells labeled in a segmentation mask based on the
+    Euclidean distance transform. 0 is the background, cells are labeled with 1,2,3,...
+
+    Parameters:
+        mask (numpy.ndarray): A segmentation mask array where each unique non-zero integer
+                              represents a unique cell.
+
+    Returns:
+        list: A list of diameters corresponding to each unique cell label in the mask, sorted by
+              the label values.
+
+    Examples:
+        >>> mask = np.array([[0, 0, 1, 1], [0, 0, 1, 1], [0, 0, 2, 2], [0, 0, 2, 2]])
+        >>> diameters = calculate_cell_diameters(mask)
+        >>> print(diameters)
+        [2.8284271247461903, 2.8284271247461903]  # Example output based on default calculation settings
+    """
     from scipy import ndimage
     # Calculate the Euclidean distance transform of the mask
     distance_transform = ndimage.distance_transform_edt(mask)
@@ -218,10 +331,30 @@ def normalize(Y):
     X = (X - np.min(X)) / (np.max(X)- np.min(X))
     return X
 
-def fill_small_holes_3d_test(masks, min_size=1000,bin_closing_structure=np.ones((5,5,3)).astype(int)):
+def fill_small_holes_3d(masks, min_size=1000,bin_closing_structure=np.ones((5,5,3)).astype(int)):
+    """
+    Fills holes in masks (3D) and discards masks smaller than min_size.
+
+    This function fills holes in each mask using scipy.ndimage.morphology.binary_fill_holes.
+    It also removes masks that are smaller than the specified min_size.
+
+    Parameters:
+    masks (ndarray): Int, 3D array of labelled masks.
+        0 represents no mask, while positive integers represent mask labels.
+        The size can be [Lz x Ly x Lx].
+    min_size (int, optional): Minimum number of pixels per mask.
+        Masks smaller than min_size will be removed.
+        Set to -1 to turn off this functionality. Default is 1000.
+    bin_closing_structure (ndarray, optional): Structuring element for binary closing operation.
+        Default is a 3x3x3 array of ones.
+
+    Returns:
+    ndarray: Int, 3D array of masks with holes filled and small masks removed.
+        0 represents no mask, while positive integers represent mask labels.
+        The size is [Lz x Ly x Lx].
+    """
     from scipy.ndimage import find_objects, binary_fill_holes, binary_closing
     from scipy.ndimage import label
-    print('test function')
     masks = masks.copy()
     masks,num_features = label(masks)
     slices = find_objects(masks)
@@ -436,7 +569,7 @@ def f1(tp,fp,fn):
 
 
 def matching(y_true, y_pred, thresh=0.5, criterion='iou', report_matches=False):
-    """Calculate detection/instance segmentation metrics between ground truth and predicted label images.
+    """Calculate detection/instance segmentation metrics between ground truth and predicted label images from stardist code.
 
     Currently, the following metrics are implemented:
 
@@ -813,6 +946,26 @@ def _shuffle_labels(y):
 
 
 def batch_matching(gt_files, seg_files, thresh_list=[0.5,0.625,0.75,0.875,1], downsample_factor=1,to_instance=False):
+    """
+    Calculate the matching metrics between ground truth and prediction images in a batch.
+
+    Args:
+        gt_files (list): A list of file paths to the ground truth images.
+        seg_files (list): A list of file paths to the prediction images.
+        thresh_list (list, optional): A list of threshold values for matching. Defaults to [0.5, 0.625, 0.75, 0.875, 1].
+        downsample_factor (int, optional): The downsampling factor for the input images. Defaults to 1.
+        to_instance (bool, optional): Whether to convert the ground truth images to instance labels. Defaults to False.
+
+    Raises:
+        ValueError: If the number of ground truth and prediction images do not match.
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing the matching metrics for each image and threshold.
+            The DataFrame has the following columns:
+            - img_id (str): The ID of the image.
+            - match_3d (float): The matching metric for the 3D images.
+
+    """
     import tifffile
     import pandas as pd
     if len(gt_files) != len(seg_files):

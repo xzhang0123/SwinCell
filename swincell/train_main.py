@@ -70,12 +70,12 @@ parser.add_argument("--save_temp_img", action="store_true", help="save temp pred
 parser.add_argument("--use_ssl_pretrained", action="store_true", help="Use SSL")
 parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
-parser.add_argument("--dsp", default=1, type=int, help="downsampling rate of input data, increase it when input images have very high resolution")
+parser.add_argument("--downsample_factor", default=1, type=int, help="downsampling rate of input data, increase it when input images have very high resolution")
 parser.add_argument("--pretrained_dir",default="./pretrained_models/",type=str,help="pretrained checkpoint directory",)
 
 
 
-def main():
+def main_train():
     args = parser.parse_args()
     if args.fold:
         args.logdir = "./" + args.logdir +'/fold'+str(args.fold)
@@ -253,4 +253,4 @@ def main_worker(gpu, args):
 
 
 if __name__ == "__main__":
-    main()
+    main_train()
