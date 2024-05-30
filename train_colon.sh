@@ -2,11 +2,11 @@
 
 #settings
 root_folder='colon_dataset'
-data_folder="/colon_20"
+data_folder="/colon_10_no_tag"
 roi_x=128   
 roi_y=128
 roi_z=32
-v_min=1
+v_min=80
 v_max=255
 
 data_dir="$root_folder""/$data_folder"

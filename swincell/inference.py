@@ -10,11 +10,12 @@ import torch
 import tifffile
 # from tensorboardX import SummaryWriter
 from torch.cuda.amp import autocast
-from swincell.utils.utils import AverageMeter, distributed_all_gather
-from swincell.data_loader import folder_loader
-from swincell.cellpose_dynamics import compute_masks
+from monai.networks.nets import SwinUNETR, UNet
 from monai.data import decollate_batch
 from monai.inferers import sliding_window_inference
+from swincell.utils.utils import AverageMeter, distributed_all_gather
+from swincell.utils.data_utils import folder_loader
+from swincell.cellpose_dynamics import compute_masks
 from functools import partial
 
 
@@ -23,18 +24,26 @@ parser = argparse.ArgumentParser(description="SwinCell Inference")
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--data_file_list", default='', help="data file names in a list")
 group.add_argument('--data_folder', type=str, help='folder containing data.')
- 
-
 parser.add_argument("--output_dir", default='./results', help="folder to save results")
 parser.add_argument("--model_dir", default='./results/model.pt', help="path to saved model")
+parser.add_argument("--batch_size", default=1, type=int, help="number of batch size")
+parser.add_argument("--gpu", default=0, type=int, help="GPU id to use")
+parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
+parser.add_argument("--out_channels", default=4, type=int, help="number of output channels, #cell probability channel + #flow channels")
 parser.add_argument("--a_min", default=0, type=float, help="cliped min input value")
 parser.add_argument("--a_max", default=255, type=float, help="cliped max input value")
 parser.add_argument("--b_min", default=0.0, type=float, help="min target (output) value")
 parser.add_argument("--b_max", default=1.0, type=float, help="max target value")
+parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
+parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
+parser.add_argument("--roi_z", default=32, type=int, help="roi size in z direction")
 parser.add_argument("--space_x", default=1, type=float, help="spacing in x direction")
 parser.add_argument("--space_y", default=1, type=float, help="spacing in y direction")
 parser.add_argument("--space_z", default=1.5, type=float, help="spacing in z direction")
+parser.add_argument("--workers", default=8, type=int, help="number of workers")
+parser.add_argument("--feature_size", default=48, type=int, help="feature size")
 parser.add_argument("--infer_overlap", default=0.5, type=float, help="sliding window inference overlap")
+parser.add_argument("--downsample_factor", default=1, type=int, help="downsampling rate of input data, increase it when input images have very high resolution")
 # parser.add_argument("--logdir", default="./results/test", type=str, help="directory to save the tensorboard logs")
 parser.add_argument("--model", default="swin", type=str, help="Model Architecture")
 # parser.add_argument("--pretrained_model_name", default="model.pt", type=str, help="pretrained model name")
@@ -45,10 +54,38 @@ parser.add_argument("--dataset", default="colon", type=str, help="dataset name")
 
 def main_infer():
     args = parser.parse_args()
+    args.test_mode = True
     torch.cuda.set_device(args.gpu)
     if args.data_folder:
-        loader = folder_loader(args)
+        infer_loader = folder_loader(args)
+    else:
+        infer_loader = None
 
+    if args.model =='unet':  # used for ablation study
+        model = UNet(
+            # img_size=(args.roi_x, args.roi_y, args.roi_z),
+            spatial_dims=args.spatial_dims,
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2, 2),
+            
+
+        )
+    elif args.model =='swin':
+        model = SwinUNETR(
+            img_size=(args.roi_x, args.roi_y, args.roi_z),
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            feature_size=args.feature_size,
+
+        )
+    else:
+        raise Exception("Model not defined")  
+    model_dict = torch.load(args.model_dir)["state_dict"]
+    model.load_state_dict(model_dict)
+
+    infer_step(model, infer_loader, args)
 def infer_step(model, loader, args, model_inferer=None, post_sigmoid=None, post_pred=None):
     """
     Perform inference step on the given model using the provided data loader.
@@ -64,16 +101,7 @@ def infer_step(model, loader, args, model_inferer=None, post_sigmoid=None, post_
     Returns:
         None
     """
-    if not model_inferer:
-        infer_ROI = (256,256,32)
-        model_inferer = partial(
-        sliding_window_inference,
-        roi_size=infer_ROI,
-        sw_batch_size=2,
-        predictor=model,
-        overlap=0.5,
-        mode='gaussian'
-    )
+ 
     model.eval()
 
 

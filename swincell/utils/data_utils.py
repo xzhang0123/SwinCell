@@ -131,6 +131,24 @@ class flow_generationd(MapTransform):
         return d
         
 def split_dataset(root_data_dir, split_ratios, shuffle=False, seed=0,dict_keys=True):
+    """
+    Splits the dataset into training, validation, and (optional) test sets based on the given split ratios.
+    
+    Args:
+        root_data_dir (str): The root directory of the dataset.
+        split_ratios (List[float]): The ratios of the dataset to be split into training, validation, and (optional) test sets.
+        shuffle (bool, optional): Whether to shuffle the files before splitting. Defaults to False.
+        seed (int, optional): The seed value for shuffling the files. Defaults to 0.
+        dict_keys (bool, optional): Whether to return the split datasets as lists of dictionaries with 'image' and 'label' keys. Defaults to True.
+    
+    Returns:
+        Union[Tuple[List[Dict[str, str]], List[Dict[str, str]]], Tuple[List[Dict[str, str]], List[Dict[str, str]], List[str]]]: If `dict_keys` is True, returns a tuple containing the training and validation datasets as lists of dictionaries with 'image' and 'label' keys. If `dict_keys` is False, returns a tuple containing the training and validation datasets as lists of file paths. If `split_ratios` contains three values, also returns a test dataset as a list of file paths.
+    
+    Raises:
+        ValueError: If the sum of `split_ratios` is not equal to 1.
+        ValueError: If the number of images and labels does not match.
+    
+    """
     
     assert sum(split_ratios) == 1, "Split ratios must sum to 1"
 
@@ -188,6 +206,39 @@ def split_dataset(root_data_dir, split_ratios, shuffle=False, seed=0,dict_keys=T
             return train_images, validation_images, test_images
     
 def split_dataset_folder(all_images, all_labels, split_ratios, shuffle=False, seed=0,dict_keys=True):
+    """
+    Splits the dataset into training, validation, and testing sets based on the given split ratios.
+    
+    Args:
+        all_images (list): A list of all the image file paths.
+        all_labels (list): A list of all the label file paths.
+        split_ratios (list): A list of floats representing the ratios for splitting the dataset.
+        shuffle (bool, optional): Whether to shuffle the files before splitting. Defaults to False.
+        seed (int, optional): The seed value for shuffling. Defaults to 0.
+        dict_keys (bool, optional): Whether to return the data as a list of dictionaries with 'image' and 'label' keys. Defaults to True.
+    
+    Raises:
+        AssertionError: If the sum of split ratios is not equal to 1 or if the number of images and labels do not match.
+    
+    Returns:
+        If dict_keys is True:
+            - If split_ratios contains 2 elements:
+                - train_datalist (list): A list of dictionaries containing 'image' and 'label' keys for the training set.
+                - validation_datalist (list): A list of dictionaries containing 'image' and 'label' keys for the validation set.
+            - If split_ratios contains 3 elements:
+                - train_datalist (list): A list of dictionaries containing 'image' and 'label' keys for the training set.
+                - validation_datalist (list): A list of dictionaries containing 'image' and 'label' keys for the validation set.
+                - test_datalist (list): A list of dictionaries containing 'image' keys for the testing set.
+        
+        If dict_keys is False:
+            - If split_ratios contains 2 elements:
+                - train_images (list): A list of image file paths for the training set.
+                - validation_images (list): A list of image file paths for the validation set.
+            - If split_ratios contains 3 elements:
+                - train_images (list): A list of image file paths for the training set.
+                - validation_images (list): A list of image file paths for the validation set.
+                - test_images (list): A list of image file paths for the testing set.
+    """
     
     assert sum(split_ratios) == 1, "Split ratios must sum to 1"
     assert len(all_images) == len(all_labels), "Number of images and labels must match"
@@ -293,174 +344,219 @@ class Sampler(torch.utils.data.Sampler):
 
 
 def folder_loader(args):
+    """
+    Load the data for training, validation, or inference.
+
+    Parameters:
+        args (Namespace): The command line arguments containing the data directory, fold, inference flag, and other parameters.
+
+    Returns:
+        list: A list containing the train and validation data loaders if not in inference mode.
+        DataLoader: The test data loader if in inference mode.
+
+    Raises:
+        Warning: If the dataset is not defined.
+
+    Note:
+        - If the `fold` argument is not specified, the data is split into training and validation sets with a ratio of 80% and 20% respectively.
+        - If the `fold` argument is specified, the data is split into training, validation, and testing sets with ratios of 60%, 20%, and 20% respectively.
+        - The data is loaded from the specified data directory.
+        - The data is transformed using the specified transformations.
+        - The data loaders are created with the specified batch size and number of workers.
+    """
 
     print('folder loader for tiff images')
     import os
     import glob
-    if args.fold is None:  # if not specified, use 80% for training, 20% for validation
-        N = len(os.listdir(os.path.join(args.data_dir,'images')))
-        img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tif*')))
-        label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tif*')))
+    if not args.test_mode:  # if not specified, use 80% for training, 20% for validation
+        if args.fold is None:
+            N = len(os.listdir(os.path.join(args.data_dir,'images')))
+            img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tif*')))
+            label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tif*')))
 
-        if len(img_full_paths)<5:
-            img_full_paths = img_full_paths * 10
-            label_full_paths = label_full_paths * 10
-        # split dataset, 80% for training, 20% for validation   
-        valid_img_full_paths = img_full_paths[::5]
-        valid_label_full_paths = label_full_paths[::5]
+            if len(img_full_paths)<5:
+                img_full_paths = img_full_paths * 10
+                label_full_paths = label_full_paths * 10
+            # split dataset, 80% for training, 20% for validation   
+            valid_img_full_paths = img_full_paths[::5]
+            valid_label_full_paths = label_full_paths[::5]
 
-        train_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 != 0]
-        train_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 != 0]
+            train_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 != 0]
+            train_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 != 0]
         # end of split dataset
+        else:
+         # if specified, use 60% for training, 20% for validation, 20% for testing
+            N =len(os.listdir(os.path.join(args.data_dir,'images')))
+            # print('length of datasets',N)
+            # whole dataset
+            img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tif*')))
+            label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tif*')))
+            #------split -------
+            valid_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 == args.fold-1]
+            valid_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 == args.fold-1]
 
-    else:  # if specified, use 60% for training, 20% for validation, 20% for testing
-        N =len(os.listdir(os.path.join(args.data_dir,'images')))
-        # print('length of datasets',N)
-        # whole dataset
-        img_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'images/*.tif*')))
-        label_full_paths = natsorted(glob.glob(os.path.join(args.data_dir,'masks_with_flows/*.tif*')))
-        #------split -------
-        valid_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 == args.fold-1]
-        valid_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 == args.fold-1]
+            test_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 == args.fold]
+            test_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 == args.fold]
 
-        test_img_full_paths = [f for i,f in enumerate(img_full_paths) if i%5 == args.fold]
-        test_label_full_paths = [f for i,f in enumerate(label_full_paths) if i%5 == args.fold]
+            train_img_full_paths = [f for f in img_full_paths if f not in valid_img_full_paths and f not in test_img_full_paths]
+            train_label_full_paths = [f for f in label_full_paths if f not in valid_label_full_paths and f not in test_label_full_paths]
+            print('length of train/valid/test datasets',len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),len(test_img_full_paths),len(test_label_full_paths))
 
-        train_img_full_paths = [f for f in img_full_paths if f not in valid_img_full_paths and f not in test_img_full_paths]
-        train_label_full_paths = [f for f in label_full_paths if f not in valid_label_full_paths and f not in test_label_full_paths]
-        print('length of train/valid/test datasets',len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths),len(test_img_full_paths),len(test_label_full_paths))
+        train_datalist = [{'image':image,'label':label} for image,label in zip(train_img_full_paths, train_label_full_paths)]    
+        val_datalist = [{'image':image,'label':label} for image,label in zip(valid_img_full_paths, valid_label_full_paths)]  
+        print('length of train/valid',len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths))
 
-    train_datalist = [{'image':image,'label':label} for image,label in zip(train_img_full_paths, train_label_full_paths)]    
-    val_datalist = [{'image':image,'label':label} for image,label in zip(valid_img_full_paths, valid_label_full_paths)]  
-    print('length of train/valid',len(train_img_full_paths),len(train_label_full_paths),len(valid_img_full_paths),len(valid_label_full_paths))
+        if args.dataset =='colon':
 
-    if args.dataset =='colon':
+            img_shape= (1300,1030,129) #original shape
+            img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+            img_reshape = tuple(int(e) for e in img_reshape)
 
-        img_shape= (1300,1030,129) #original shape
-        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
-        img_reshape = tuple(int(e) for e in img_reshape)
+        elif args.dataset =='allen':
 
-    elif args.dataset =='allen':
+            img_shape=(900,600,64)
+            img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+            img_reshape = tuple(int(e) for e in img_reshape)
 
-        img_shape=(900,600,64)
-        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
-        img_reshape = tuple(int(e) for e in img_reshape)
+        elif args.dataset =='nanolive':
 
-    elif args.dataset =='nanolive':
+            img_shape=(512,512,96)
+            img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
+            img_reshape = tuple(int(e) for e in img_reshape)
 
-        img_shape=(512,512,96)
-        img_reshape = (img_shape[0]//args.downsample_factor,img_shape[1]//args.downsample_factor,img_shape[2]//args.downsample_factor)
-        img_reshape = tuple(int(e) for e in img_reshape)
+        else:
+            raise Warning("dataset not defined")
+            img_reshape = None
 
-    else:
-        raise Warning("dataset not defined")
-        img_reshape = None
+        train_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image", "label"]),
+                transforms.EnsureChannelFirstd(keys=["image", "label"]),
+                flow_reshaped(keys=["label"]),
+                #----------------------------for multichannel image-----------------------
+                # transforms.AddChanneld(keys=["image"]),
+                # transforms.ConvertToMultiChannelNanolived(keys="label"),
+                #----------------------------for single channel image-----------------------
+                # transforms.AddChanneld(keys=["image","label"]),
+                # transforms.AsDiscreted(keys=["label"],threshold=1),
+                #----------------------------------------------------------------
+                transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),
 
-    train_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image", "label"]),
-            transforms.EnsureChannelFirstd(keys=["image", "label"]),
-            flow_reshaped(keys=["label"]),
-            #----------------------------for multichannel image-----------------------
-            # transforms.AddChanneld(keys=["image"]),
-            # transforms.ConvertToMultiChannelNanolived(keys="label"),
-            #----------------------------for single channel image-----------------------
-            # transforms.AddChanneld(keys=["image","label"]),
-            # transforms.AsDiscreted(keys=["label"],threshold=1),
-            #----------------------------------------------------------------
-	        transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),
-
-            
-            # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
-            # transforms.Spacingd(
-            #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
-            # ),
-            transforms.ScaleIntensityRanged(
-                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
-            ),
-            transforms.RandSpatialCropSamplesd(
-                keys=["image","label"],
-                roi_size=[args.roi_x, args.roi_y, args.roi_z],
-                num_samples=2,
-                random_center=True,
-                random_size=False,
-            ),
-            # transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
-            # transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
-            transforms.ToTensord(keys=["image", "label"]),
-        ]
-    )
-    val_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image", "label"]),
-            transforms.EnsureChannelFirstd(keys=["image", "label"]),
-            flow_reshaped(keys=["label"]),
-            #----------------------------for multichannel-----------------------
-            # transforms.AddChanneld(keys=["image"]),
-            # transforms.ConvertToMultiChannelNanolived(keys="label"),
-            #----------------------------for single channel-----------------------
-            # transforms.AddChanneld(keys=["image","label"]),
-            # transforms.AsDiscreted(keys=["label"],threshold=1),
-            #----------------------------------------------------------------
-
-            transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),  #for nanolive
-            # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
-            # transforms.Spacingd(
-            #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
-            # ),   # for  anisotropic datasets
-            transforms.ScaleIntensityRanged(
-                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
-            ),
-            transforms.RandSpatialCropSamplesd(
-                keys=["image","label"],
-                roi_size=[args.roi_x, args.roi_y, args.roi_z],
-                num_samples=2,
-                random_center=True,
-                random_size=False,
-            ),
-            transforms.ToTensord(keys=["image", "label"]),
-        ]
-    )
-
-    test_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image"]),
-            transforms.EnsureChannelFirstd(keys=["image"]),
-            transforms.ScaleIntensityRanged(
-                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=0, b_max=1, clip=True
-            ),
-            transforms.ToTensord(keys=["image"]),
-        ]
-    )
-
-
-    if 1: #no cache
-        train_ds = data.Dataset(data=train_datalist, transform=train_transform)
-    else:
-        train_ds = data.CacheDataset(
-            data=train_datalist, transform=train_transform, cache_num=1, cache_rate=0.2, num_workers=args.workers
+                
+                # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.15),
+                # transforms.Spacingd(
+                #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+                # ),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                transforms.RandSpatialCropSamplesd(
+                    keys=["image","label"],
+                    roi_size=[args.roi_x, args.roi_y, args.roi_z],
+                    num_samples=2,
+                    random_center=True,
+                    random_size=False,
+                ),
+                # transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+                # transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+                transforms.ToTensord(keys=["image", "label"]),
+            ]
         )
-    train_sampler = Sampler(train_ds) if args.distributed else None
-    train_loader = data.DataLoader(
-        train_ds,
-        batch_size=args.batch_size,
-        shuffle=(train_sampler is None),
-        num_workers=args.workers,
-        sampler=train_sampler,
-        pin_memory=True,
-    )
-    # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
-    val_ds = data.Dataset(data=val_datalist, transform=val_transform)
-    val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
-    val_loader = data.DataLoader(
-        val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
-    )
-    loader = [train_loader, val_loader]
+        val_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image", "label"]),
+                transforms.EnsureChannelFirstd(keys=["image", "label"]),
+                flow_reshaped(keys=["label"]),
+                #----------------------------for multichannel-----------------------
+                # transforms.AddChanneld(keys=["image"]),
+                # transforms.ConvertToMultiChannelNanolived(keys="label"),
+                #----------------------------for single channel-----------------------
+                # transforms.AddChanneld(keys=["image","label"]),
+                # transforms.AsDiscreted(keys=["label"],threshold=1),
+                #----------------------------------------------------------------
 
-    return loader
+                transforms.Resized(keys=["image", "label"],spatial_size=img_reshape),  #for nanolive
+                # transforms.RandZoomd(keys=["image", "label"],prob=0.5,min_zoom=0.85,max_zoom=1.05),
+                # transforms.Spacingd(
+                #     keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
+                # ),   # for  anisotropic datasets
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                transforms.RandSpatialCropSamplesd(
+                    keys=["image","label"],
+                    roi_size=[args.roi_x, args.roi_y, args.roi_z],
+                    num_samples=2,
+                    random_center=True,
+                    random_size=False,
+                ),
+                transforms.ToTensord(keys=["image", "label"]),
+            ]
+        )
+        if 1: #no cache
+            train_ds = data.Dataset(data=train_datalist, transform=train_transform)
+        else:
+            train_ds = data.CacheDataset(
+                data=train_datalist, transform=train_transform, cache_num=1, cache_rate=0.2, num_workers=args.workers
+            )
+        train_sampler = Sampler(train_ds) if args.distributed else None
+        train_loader = data.DataLoader(
+            train_ds,
+            batch_size=args.batch_size,
+            shuffle=(train_sampler is None),
+            num_workers=args.workers,
+            sampler=train_sampler,
+            pin_memory=True,
+        )
+        # val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+        val_ds = data.Dataset(data=val_datalist, transform=val_transform)
+        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+        val_loader = data.DataLoader(
+            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+        )
+        loader = [train_loader, val_loader]
+
+        return loader
+    else:   # Inference mode
+        print('Inference mode')
+        img_full_paths = natsorted(glob.glob(os.path.join(args.data_folder,'images/*.tif*')))
+        # label_full_paths = natsorted(glob.glob(os.path.join(args.data_folder,'masks_with_flows/*.tif*')))
+        #------split -------
+        test_img_full_paths = [f for i,f in enumerate(img_full_paths)]
+        # test_label_full_paths = [f for i,f in enumerate(label_full_paths)]
+        test_datalist =  [{'image':image} for image in test_img_full_paths]
+        
+        test_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image"]),
+                transforms.EnsureChannelFirstd(keys=["image"]),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=0, b_max=1, clip=True
+                ),
+                transforms.ToTensord(keys=["image"]),
+            ]
+        )
+        test_ds = data.Dataset(data=test_datalist, transform=test_transform)
+        test_loader = data.DataLoader(
+            test_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, sampler=None,
+        )
+        return test_loader
+
+
+
 
 
 def folder_loader_nothefly(args):
+    """
+    Load data from a folder and return a list of data loaders for training and validation.
+    
+    Args:
+        args (Namespace): 
+    Returns:
+        list: A list containing two data loaders: train_loader and val_loader.
+            - train_loader (DataLoader): The data loader for training.
+            - val_loader (DataLoader): The data loader for validation.
+    """
     
     print('folder loader for tiff images')
     import os
@@ -595,6 +691,17 @@ def folder_loader_nothefly(args):
     return loader
 
 def get_loader_Allen_tiff(args):
+    """
+    Get the data loaders for the Allen tiff dataset.
+
+    Args:
+        args (Namespace): The command-line arguments.
+
+    Returns:
+        list: A list containing the train and validation data loaders.
+
+    This function loads the Allen tiff dataset by reading the metadata from the csv file. It then splits the dataset into training and validation sets based on the specified fold. The training and validation sets are created by joining the image and label paths. The data is then transformed using a series of transformations defined in the `train_transform`, `val_transform`, and `test_transform` variables. The transformed data is then loaded into data loaders using the `data.Dataset` and `data.DataLoader` classes. The data loaders are returned as a list.
+    """
     
     root_dir = '/data/download_data/quilt-data-access-tutorials-main/all_fov/'
     df = pd.read_csv(root_dir+'meta_info.csv')
