@@ -517,13 +517,15 @@ def folder_loader(args):
         loader = [train_loader, val_loader]
 
         return loader
+    #----------------------------------------------------------------------------------------------------------------
     else:   # Inference mode
         print('Inference mode')
         img_full_paths = natsorted(glob.glob(os.path.join(args.data_folder,'images/*.tif*')))
         # label_full_paths = natsorted(glob.glob(os.path.join(args.data_folder,'masks_with_flows/*.tif*')))
-        #------split -------
+
         test_img_full_paths = [f for i,f in enumerate(img_full_paths)]
         # test_label_full_paths = [f for i,f in enumerate(label_full_paths)]
+        print('Number of images in test data:',len(test_img_full_paths))
         test_datalist =  [{'image':image} for image in test_img_full_paths]
         
         test_transform = transforms.Compose(
