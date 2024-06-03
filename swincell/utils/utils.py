@@ -154,6 +154,19 @@ def plot_with_se(ax,matrix,iou_thresholds,label=None,style='-',color=None):
     ax.fill_between(iou_thresholds,mean-se,mean+se,alpha=0.3,label=label,color=color,edgecolor=None)
     return ax
 
+def plot_with_std(ax,matrix,iou_thresholds,label=None,style='-',color=None):
+    """
+    Plot the mean and standard error of the evaluation metrics for a given IoU threshold, used to plot results in papers
+    Returns:
+    matplotlib.axes.Axes: The axis object with the plot.
+    """
+    mean = np.mean(matrix, axis=0)
+    std = np.std(matrix, axis=0)
+    # se = std / np.sqrt(matrix.shape[0])
+    ax.plot(iou_thresholds,mean,linewidth=2,linestyle=style,color=color)
+
+    ax.fill_between(iou_thresholds,mean-std,mean+std,alpha=0.3,label=label,color=color,edgecolor=None)
+    return ax
 def plot_box_with_violin(ax,data,label=None,style='-',facecolorlist=None):
     """
     Plot both boxplot and violin plot together on a given axis for visual comparison of data distribution.
@@ -387,7 +400,6 @@ def fill_small_holes_3d(masks, min_size=1000,bin_closing_structure=np.ones((5,5,
 
 # MASK Matching algorithm used by stardist algorithm:
 
-import numpy as np
 
 from numba import jit
 from tqdm import tqdm
