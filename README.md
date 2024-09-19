@@ -1,5 +1,5 @@
 # SwinCell: a transformer-based framework for dense 3D cellular segmentation 
-
+A 3D transformer-based framework [1] that leverages the Swin-Transformer architecture for flow prediction [2], enabling efficient segmentation of individual cell instances in 3D
 
 ## Requiments
 see requiments.txt
@@ -64,3 +64,8 @@ sh python ./swincell/train_main.py --data_dir=<data_dir> --val_every=<valid_ever
 ## Trouble shooting/common mistakes:
 * feature size of swin-transformer must be divisible by 32, error raises otherwise
 * final ROI size (patch size) must be larger than input image after downsampling (if dsp>1)
+
+## References
+
+1.  Zhang, X. et al. SwinCell: a transformer-based framework for dense 3D cellular segmentation. 2024.04.05.588365 Preprint at https://doi.org/10.1101/2024.04.05.588365 (2024).
+2.	Stringer, C., Wang, T., Michaelos, M. & Pachitariu, M. Cellpose: a generalist algorithm for cellular segmentation. Nat. Methods 18, 100–106 (2021).
