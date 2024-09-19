@@ -1,5 +1,11 @@
-# flow generation algorithm from Cellpose, C. Stringer et al. 2021
-#https://github.com/MouseLand/cellpose
+
+
+"""
+flow generation algorithm from Cellpose, C. Stringer et al. 2021
+
+Copyright © 2022 Howard Hughes Medical Institute, Authored by Carsen Stringer and Marius Pachitariu.
+
+"""
 
 import  os,glob
 from scipy.ndimage import maximum_filter1d, find_objects,binary_fill_holes

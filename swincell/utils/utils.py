@@ -156,7 +156,7 @@ def plot_with_se(ax,matrix,iou_thresholds,label=None,style='-',color=None):
 
 def plot_with_std(ax,matrix,iou_thresholds,label=None,style='-',color=None):
     """
-    Plot the mean and standard error of the evaluation metrics for a given IoU threshold, used to plot results in papers
+    Plot the mean and std of the evaluation metrics for a given IoU threshold, used to plot results in papers
     Returns:
     matplotlib.axes.Axes: The axis object with the plot.
     """
