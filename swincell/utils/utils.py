@@ -326,7 +326,20 @@ def distributed_all_gather(
     return tensor_list_out
 
 
+def get_predefined_colors():
+    """
+    Returns a list of predefined colors normalized to the range [0, 1].
 
+    :return: A list of normalized RGB color tuples.
+    """
+    colors = [
+        (207 / 255, 54 / 255, 112 / 255),
+        (83 / 255, 153 / 255, 179 / 255),
+        (112 / 255, 170 / 255, 87 / 255),
+        (115 / 255, 81 / 255, 155 / 255),
+        (235 / 255, 123 / 255, 46 / 255),
+    ]
+    return colors
 
 def normalize_image_percentile(Y, lower=1,upper=99):
     """ normalize image so 0.0 is 1st percentile and 1.0 is 99th percentile """

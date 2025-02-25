@@ -21,7 +21,7 @@ from monai.losses import DiceLoss
 from torch.nn import MSELoss,BCEWithLogitsLoss
 
 from monai.metrics import DiceMetric
-from monai.networks.nets import SwinUNETR, UNet
+from monai.networks.nets import SwinUNETR, UNet,ViTAutoEnc, UNETR
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 
@@ -113,7 +113,7 @@ def main_worker(gpu, args):
     inf_size = [args.roi_x, args.roi_y, args.roi_z]
 
     pretrained_pth = args.pretrained_model_name
-    if args.model =='unet':  # used for ablation study
+    if str.lower(args.model)  =='unet':  # used for ablation study
         model = UNet(
             # img_size=(args.roi_x, args.roi_y, args.roi_z),
             spatial_dims=args.spatial_dims,
@@ -124,13 +124,26 @@ def main_worker(gpu, args):
             
 
         )
-    elif args.model =='swin':
+    elif str.lower(args.model)  =='swin':
         model = SwinUNETR(
             img_size=(args.roi_x, args.roi_y, args.roi_z),
             in_channels=args.in_channels,
             out_channels=args.out_channels,
             feature_size=args.feature_size,
             use_checkpoint=args.use_checkpoint,
+        )
+    elif str.lower(args.model) =='vit':
+        model = ViTAutoEnc(
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            patch_size=(16,16,16),
+            img_size=(args.roi_x, args.roi_y, args.roi_z),
+        )
+    elif str.lower(args.model)  =="unetr":
+        model = UNETR(
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            img_size=(args.roi_x, args.roi_y, args.roi_z),
         )
     else:
         raise Exception("Model not defined") 

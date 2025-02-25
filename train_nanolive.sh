@@ -16,7 +16,7 @@ pre_trained_model=''
 
 for fold in {1..5}
 do
-	python ./swincell/train_main.py --data_dir=$data_dir --val_every=1 --distributed --model 'swin' --a_min=$v_min --a_max=$v_max --logdir $log_dir --max_epochs 5000  --fold $fold \
+	python ./swincell/train_main.py --data_dir=$data_dir --val_every=100 --distributed --model 'swin' --a_min=$v_min --a_max=$v_max --logdir $log_dir --max_epochs 5000  --fold $fold \
 --roi_x=128 --roi_y=128 --roi_z=32  --use_checkpoint --feature_size=48 --save_checkpoint --use_flows \
 
 sleep 200
